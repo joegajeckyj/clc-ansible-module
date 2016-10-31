@@ -496,6 +496,16 @@ class ClcGroup(object):
             groups += self._group_by_name_recursive(group_name, child_group)
         return groups
 
+    def _group_full_path(self, group, id=False, delimiter=' / '):
+        path_elements = []
+        while group is not None:
+            if id:
+                path_elements.insert(0, group.id)
+            else:
+                path_elements.insert(0, group.name)
+            group = group.parent
+        return delimiter.join(path_elements)
+
     def _wait_for_requests_to_complete(self, requests_lst):
         """
         Waits until the CLC requests are complete if the wait argument is True
