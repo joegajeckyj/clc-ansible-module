@@ -377,7 +377,7 @@ class ClcGroup(object):
         :param description: string - a text description of the group
         :return: clc_sdk.Group - the created group
         """
-        response = None
+        group = None
         parent = self._group_by_name(parent_name)
         if not description:
             description = group_name
@@ -387,10 +387,12 @@ class ClcGroup(object):
                 'POST', '/v2/groups/{0}'.format(self.api.clc_alias),
                 data={'name': group_name, 'description': description,
                       'parentGroupId': parent.id})
+            group_data = json.loads(response.read())
+            group = self._group_from_data(group_data)
         except urllib2.HTTPError as ex:
             self.module.fail_json(msg='Failed to create group :{0}. {1}'.format(
                 group_name, ex))
-        return response
+        return group
 
     def _group_exists(self, group_name, parent_name):
         """
@@ -455,6 +457,7 @@ class ClcGroup(object):
         :return: An object that contains
         """
         group = clc_ansible_utils.clc.Group()
+        group.data = group_data
         for attr in ['id', 'name', 'description', 'type']:
             if attr in group_data:
                 setattr(group, attr, group_data[attr])
