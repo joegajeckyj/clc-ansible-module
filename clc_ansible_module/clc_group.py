@@ -270,7 +270,7 @@ class ClcGroup(object):
         if requests.__version__ and LooseVersion(requests.__version__) < LooseVersion('2.5.0'):
             self.module.fail_json(
                 msg='requests library  version should be >= 2.5.0')
-        self._headers = {}
+        self._headers = {'Content-Type': 'application/json'}
         self._set_user_agent()
 
     def process_request(self):
@@ -334,7 +334,6 @@ class ClcGroup(object):
             self.v2_api_token = v2_api_token
             self.clc_alias = clc_alias
         elif v2_api_username and v2_api_passwd:
-            self._headers['Content-Type'] = 'application/json'
             try:
                 response = open_url(
                     url=self.api_url + '/v2/authentication/login',
@@ -349,11 +348,10 @@ class ClcGroup(object):
                 return self.module.fail_json(
                     msg='Failed to authenticate with clc V2 api.')
 
-            self._headers['Cookie'] = response.headers.get('Set-Cookie')
-
             r = json.loads(response.read())
             self.v2_api_token = r['bearerToken']
             self.clc_alias = r['accountAlias']
+            self.clc_location = r['locationAlias']
         else:
             return self.module.fail_json(
                 msg="You must set the CLC_V2_API_USERNAME and CLC_V2_API_PASSWD "
@@ -474,28 +472,81 @@ class ClcGroup(object):
         :param datacenter: string - the datacenter to walk (ex: 'UC1')
         :return: a dictionary of groups and parents
         """
+        if datacenter is None:
+            datacenter = self.clc_location
+        # TODO: Remove clc_sdk dependency
+        try:
+            headers = {'Authorization': 'Bearer {0}'.format(
+                self.v2_api_token)}
+            headers.update(self._headers)
+            response = open_url(
+                url='{0}/v2/datacenters/{1}/{2}'.format(
+                    self.api_url, self.clc_alias, datacenter),
+                method='GET',
+                headers=headers,
+                data={'GroupLinks': 'true'})
+        # TODO: Handle different response codes from API
+        except urllib2.HTTPError as ex:
+            return self.module.fail_json(msg=ex)
+        #if response.code not in [200]:
+        #    return self.module.fail_json(
+        #        msg='Failed to authenticate with clc V2 api.')
+
+        r = json.loads(response.read())
+        root_group_id, root_group_name = [(obj['id'], obj['name'])
+                                          for obj in r['links']
+                                          if obj['rel'] == "group"][0]
+
+        try:
+            headers = {'Authorization': 'Bearer {0}'.format(
+                self.v2_api_token)}
+            headers.update(self._headers)
+            response = open_url(
+                url='{0}/v2/groups/{1}/{2}'.format(
+                    self.api_url, self.clc_alias, root_group_id),
+                method='GET',
+                headers=headers)
+        # TODO: Handle different response codes from API
+        except urllib2.HTTPError as ex:
+            return self.module.fail_json(msg=ex)
+
+        self.group_data = json.loads(response.read())
+        # TODO: Replicate functionality of Group.Subgroups()
+        # Basically iterate through all the groups and save off the info
+        # Need to figure out expected data structure
+
+
         self.root_group = self.clc.v2.Datacenter(
             location=datacenter).RootGroup()
         return self._walk_groups_recursive(
             parent_group=None,
             child_group=self.root_group)
 
-    def _walk_groups_recursive(self, parent_group, child_group):
+    def _walk_groups_recursive(self, parent_group, group_data):
         """
         Walk a parent-child tree of groups, starting with the provided child group
         :param parent_group: clc_sdk.Group - the parent group to start the walk
         :param child_group: clc_sdk.Group - the child group to start the walk
         :return: a dictionary of groups and parents
         """
-        result = {str(child_group): (child_group, parent_group)}
-        groups = child_group.Subgroups().groups
-        if len(groups) > 0:
-            for group in groups:
-                if group.type != 'default':
-                    continue
-
-                result.update(self._walk_groups_recursive(child_group, group))
+        group = self._group_object(group_data)
+        result = {group['name']: (group, parent_group)}
+        for child_data in group_data['groups']:
+            if child_data['type'] != 'default':
+                continue
+            result.update(self._walk_groups_recursive(group, child_data))
         return result
+
+    def _group_object(self, group_data):
+        """
+        Construct a group object that maps JSON dictionary values to attributes
+        :param group_data:
+        :return: An object that contains
+        """
+        group = object()
+        for attr in ['id', 'name', 'description', 'type']:
+            setattr(group, attr, group_data[attr])
+        return group
 
     def _wait_for_requests_to_complete(self, requests_lst):
         """
