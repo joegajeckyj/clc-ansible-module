@@ -461,6 +461,13 @@ class ClcGroup(object):
         return group
 
     def _group_by_name(self, group_name, group=None, parent_name=None):
+        """
+        :param group_name: Name of group to search form
+        :param group: Optional group under which to search
+        :param parent_name:  Optional name of parent
+        :return: Group object found, or None if no groups found.
+        Will return an error if multiple groups found matching parameters.
+        """
         groups = self._group_by_name_recursive(
             group_name, group=group, parent_name=parent_name)
         if len(groups) > 1:
@@ -481,11 +488,10 @@ class ClcGroup(object):
     def _group_by_name_recursive(self, group_name, group=None,
                                  parent_name=None):
         """
-        Returns
         :param group_name: Name of group to search for
         :param group: Optional group under which to search
         :param parent_name: Optional name of parent
-        :return:
+        :return: List of groups found matching the described parameters
         """
         groups = []
         if group is None:
@@ -502,6 +508,12 @@ class ClcGroup(object):
         return groups
 
     def _group_full_path(self, group, id=False, delimiter=' / '):
+        """
+        :param group: Group object for which to show full ancestry
+        :param id: Optional flag to show group id hierarchy
+        :param delimiter: Optional delimiter
+        :return:
+        """
         path_elements = []
         while group is not None:
             if id:
