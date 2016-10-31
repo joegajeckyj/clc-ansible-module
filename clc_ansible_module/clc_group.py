@@ -294,7 +294,8 @@ class ClcGroup(object):
                 self._wait_for_requests_to_complete(requests_lst)
         else:
             changed, group = self._ensure_group_is_present(
-                group_name=group_name, parent_name=parent_name, group_description=group_description)
+                group_name=group_name, parent_name=parent_name,
+                group_description=group_description)
         try:
             group = group.data
         except AttributeError:
@@ -328,6 +329,8 @@ class ClcGroup(object):
         group = []
         results = []
 
+        if parent_name is None:
+            parent_name = self.root_group.name
         if self._group_exists(group_name=group_name, parent_name=parent_name):
             if not self.module.check_mode:
                 group.append(group_name)
@@ -336,14 +339,17 @@ class ClcGroup(object):
             changed = True
         return changed, group, results
 
-    def _delete_group(self, group_name):
+    def _delete_group(self, group_name, parent_name):
         """
         Delete the provided server group
         :param group_name: string - the server group to delete
         :return: none
         """
         response = None
-        group = self._group_by_name_recursive(group_name)
+        if parent_name is None:
+            parent_name = self.root_group.name
+        group = self._group_by_name_recursive(group_name,
+                                              parent_name=parent_name)
         # TODO: API call to delete group
         try:
             response = group.Delete()
@@ -374,10 +380,10 @@ class ClcGroup(object):
         description = group_description
         changed = False
 
-        parent_exists = self._group_exists(group_name=parent_name, parent_name=None)
-        child_exists = self._group_exists(
-            group_name=group_name,
-            parent_name=parent_name)
+        parent_exists = self._group_exists(group_name=parent_name,
+                                           parent_name=None)
+        child_exists = self._group_exists(group_name=group_name,
+                                          parent_name=parent_name)
 
         if parent_exists and child_exists:
             group = self._group_by_name_recursive(group_name,
@@ -422,11 +428,13 @@ class ClcGroup(object):
         :return: boolean - whether the group exists
         """
         result = False
-        group = self._group_by_name_recursive(group_name)
+        if parent_name:
+            group = self._group_by_name_recursive(group_name,
+                                                  parent_name=parent_name)
+        else:
+            group = self._group_by_name_recursive(group_name)
         if group:
-            if ((group.parent is None and parent_name is None) or
-                    group.parent.name == parent_name):
-                result = True
+            result = True
         return result
 
     def _get_group_tree_for_datacenter(self, datacenter=None):
@@ -481,26 +489,27 @@ class ClcGroup(object):
                 setattr(group, attr, group_data[attr])
         return group
 
-    def _group_by_name_recursive(self, group_name, group=None, parent=False):
+    def _group_by_name_recursive(self, group_name, group=None,
+                                 parent_name=None):
         """
         Returns
         :param group_name: Name of group to search for
         :param group: Optional group under which to search
-        :param parent: Optional name (or None if root group) of parent
+        :param parent_name: Optional name of parent
         :return:
         """
         groups = []
         if group is None:
             group = self.root_group
         if group_name == group.name:
-            # parent for root group is None, so can't use for default value
-            if parent is False:
+            if parent_name is None:
                 groups.append(group)
-            elif ((group.parent is None and parent is None) or
-                    (group.parent is not None and parent == group.parent.name)):
+            elif group.parent is not None and parent_name == group.parent.name:
                 groups.append(group)
         for child_group in group.children:
-            groups += self._group_by_name_recursive(group_name, child_group)
+            groups += self._group_by_name_recursive(group_name,
+                                                    group=child_group,
+                                                    parent_name=parent_name)
         if len(groups) > 1:
             # TODO:  More useful output to the user
             error_message = 'Found {0:%d} groups with name: {1}'.format(
