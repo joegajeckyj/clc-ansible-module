@@ -1,4 +1,5 @@
 #!/usr/bin/env python
+# -*- coding: utf-8 -*-
 
 # CenturyLink Cloud Ansible Modules.
 #
@@ -288,10 +289,10 @@ class ClcGroup(object):
             datacenter=location)
 
         if state == "absent":
-            changed, group, requests = self._ensure_group_is_absent(
+            changed, group, requests_lst = self._ensure_group_is_absent(
                 group_name=group_name, parent_name=parent_name)
-            if requests:
-                self._wait_for_requests_to_complete(requests)
+            if requests_lst:
+                self._wait_for_requests_to_complete(requests_lst)
         else:
             changed, group = self._ensure_group_is_present(
                 group_name=group_name, parent_name=parent_name, group_description=group_description)

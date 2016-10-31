@@ -29,8 +29,8 @@ setup(
     url='https://github.com/CenturylinkCloud/clc-ansible-module',
     download_url='https://github.com/CenturylinkCloud/clc-ansible-module.git',
     install_requires=[
-        'ansible==2.0.2.0',
-        'clc-sdk==2.44',
+        'ansible>=2.0.2.0',
+        'clc-sdk>=2.44',
         'future',
         'mock',
         'nose',
