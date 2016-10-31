@@ -226,52 +226,19 @@ group:
 __version__ = '${version}'
 
 import clc_ansible_utils.clc
-from distutils.version import LooseVersion
-
-try:
-    import requests
-except ImportError:
-    REQUESTS_FOUND = False
-else:
-    REQUESTS_FOUND = True
-
-#
-#  Requires the clc-python-sdk.
-#  sudo pip install clc-sdk
-#
-try:
-    import clc as clc_sdk
-    from clc import CLCException
-except ImportError:
-    CLC_FOUND = False
-    clc_sdk = None
-else:
-    CLC_FOUND = True
 
 
 class ClcGroup(object):
 
-    clc = None
     root_group = None
 
     def __init__(self, module):
         """
         Construct module
         """
-        self.clc = clc_sdk
         self.api = clc_ansible_utils.clc.ApiV2(module)
         self.module = module
         self.root_group = None
-
-        if not CLC_FOUND:
-            self.module.fail_json(
-                msg='clc-python-sdk required for this module')
-        if not REQUESTS_FOUND:
-            self.module.fail_json(
-                msg='requests library is required for this module')
-        if requests.__version__ and LooseVersion(requests.__version__) < LooseVersion('2.5.0'):
-            self.module.fail_json(
-                msg='requests library  version should be >= 2.5.0')
 
     def process_request(self):
         """
@@ -284,6 +251,8 @@ class ClcGroup(object):
         group_description = self.module.params.get('description')
         state = self.module.params.get('state')
 
+        # TODO: Initialize credentials from non-private method
+        self.api._set_clc_credentials_from_env()
         self.root_group = self._get_group_tree_for_datacenter(
             datacenter=location)
 
@@ -333,8 +302,9 @@ class ClcGroup(object):
             parent_name = self.root_group.name
         if self._group_exists(group_name=group_name, parent_name=parent_name):
             if not self.module.check_mode:
+                # TODO: Update self.root_group removing group if successful
                 group.append(group_name)
-                result = self._delete_group(group_name)
+                result = self._delete_group(group_name, parent_name)
                 results.append(result)
             changed = True
         return changed, group, results
@@ -349,13 +319,14 @@ class ClcGroup(object):
         if parent_name is None:
             parent_name = self.root_group.name
         group = self._group_by_name(group_name, parent_name=parent_name)
-        # TODO: API call to delete group
+        # TODO: Check for proper HTTP response code
         try:
-            response = group.Delete()
-        except CLCException as ex:
+            response = self.api.call(
+                'DELETE', '/v2/groups/{0}/{1}'.format(self.api.clc_alias,
+                                                      group.id))
+        except urllib2.HTTPError as ex:
             self.module.fail_json(msg='Failed to delete group :{0}. {1}'.format(
-                group_name, ex.response_text
-            ))
+                group_name, ex.response_text))
         return response
 
     def _ensure_group_is_present(
@@ -372,11 +343,11 @@ class ClcGroup(object):
             changed:  Boolean- whether a change was made,
             group:  A clc group object for the group
         """
-        # TODO: Check to see how this handles group creation
         assert self.root_group, "Implementation Error: Root Group not set"
         if parent_name is None:
             parent_name = self.root_group.name
         description = group_description
+        group = group_name
         changed = False
 
         parent_exists = self._group_exists(group_name=parent_name,
@@ -385,11 +356,11 @@ class ClcGroup(object):
                                           parent_name=parent_name)
 
         if parent_exists and child_exists:
-            group = self._group_by_name_recursive(group_name,
-                                                  parent=parent_name)
+            group = self._group_by_name(group_name, parent_name=parent_name)
             changed = False
         elif parent_exists and not child_exists:
             if not self.module.check_mode:
+                # TODO: Update self.root_group with new information
                 group = self._create_group(
                     group_name=group_name,
                     parent_name=parent_name,
@@ -411,10 +382,15 @@ class ClcGroup(object):
         """
         response = None
         parent = self._group_by_name(parent_name)
-        # TODO: API call to create group
+        if not description:
+            description = group_name
+        # TODO: Check for proper HTTP response code
         try:
-            response = parent.Create(name=group_name, description=description)
-        except CLCException as ex:
+            response = self.api.call(
+                'POST', '/v2/groups/{0}'.format(self.api.clc_alias),
+                data={'name': group_name, 'description': description,
+                      'parentGroupId': parent.id})
+        except urllib2.HTTPError as ex:
             self.module.fail_json(msg='Failed to create group :{0}. {1}'.format(
                 group_name, ex.response_text))
         return response
@@ -491,13 +467,12 @@ class ClcGroup(object):
         groups = self._group_by_name_recursive(
             group_name, group=group, parent_name=parent_name)
         if len(groups) > 1:
-            # TODO:  More useful output to the user
-            error_message = 'Found {0:%d} groups with name: {1}'.format(
+            error_message = 'Found {0:d} groups with name: \"{1}\"'.format(
                 len(groups), group_name)
             if parent_name is None:
                 error_message += ' in root group'
             else:
-                error_message = ' in group: {0}'.format(parent)
+                error_message += ' in group: \"{0}\"'.format(parent_name)
             return self.module.fail_json(msg=error_message)
         elif len(groups) == 1:
             return groups[0]
@@ -546,11 +521,9 @@ class ClcGroup(object):
         if not self.module.params['wait']:
             return
         for request in requests_lst:
-            request.WaitUntilComplete()
-            for request_details in request.requests:
-                if request_details.Status() != 'succeeded':
-                    self.module.fail_json(
-                        msg='Unable to process group request')
+            request.read()
+            if not request.code >= 200 and request.code < 300:
+                self.module.fail_json(msg='Unable to process group request')
 
 
 def main():
