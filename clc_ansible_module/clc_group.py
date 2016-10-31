@@ -270,8 +270,8 @@ class ClcGroup(object):
         if requests.__version__ and LooseVersion(requests.__version__) < LooseVersion('2.5.0'):
             self.module.fail_json(
                 msg='requests library  version should be >= 2.5.0')
-
-        self._set_user_agent(self.clc)
+        self._headers = {}
+        self._set_user_agent()
 
     def process_request(self):
         """
@@ -328,19 +328,32 @@ class ClcGroup(object):
         v2_api_username = env.get('CLC_V2_API_USERNAME', False)
         v2_api_passwd = env.get('CLC_V2_API_PASSWD', False)
         clc_alias = env.get('CLC_ACCT_ALIAS', False)
-        api_url = env.get('CLC_V2_API_URL', False)
-
-        if api_url:
-            self.clc.defaults.ENDPOINT_URL_V2 = api_url
+        self.api_url = env.get('CLC_V2_API_URL', 'https://api.ctl.io')
 
         if v2_api_token and clc_alias:
-            self.clc._LOGIN_TOKEN_V2 = v2_api_token
-            self.clc._V2_ENABLED = True
-            self.clc.ALIAS = clc_alias
+            self.v2_api_token = v2_api_token
+            self.clc_alias = clc_alias
         elif v2_api_username and v2_api_passwd:
-            self.clc.v2.SetCredentials(
-                api_username=v2_api_username,
-                api_passwd=v2_api_passwd)
+            self._headers['Content-Type'] = 'application/json'
+            try:
+                response = open_url(
+                    url=self.api_url + '/v2/authentication/login',
+                    method='POST',
+                    headers=self._headers,
+                    data=json.dumps({'username': v2_api_username,
+                                     'password': v2_api_passwd}))
+            # TODO: Handle different response codes from API
+            except urllib2.HTTPError as ex:
+                return self.module.fail_json(msg=ex)
+            if response.code not in [200]:
+                return self.module.fail_json(
+                    msg='Failed to authenticate with clc V2 api.')
+
+            self._headers['Cookie'] = response.headers.get('Set-Cookie')
+
+            r = json.loads(response.read())
+            self.v2_api_token = r['bearerToken']
+            self.clc_alias = r['accountAlias']
         else:
             return self.module.fail_json(
                 msg="You must set the CLC_V2_API_USERNAME and CLC_V2_API_PASSWD "
@@ -499,14 +512,13 @@ class ClcGroup(object):
                     self.module.fail_json(
                         msg='Unable to process group request')
 
-    @staticmethod
-    def _set_user_agent(clc):
-        if hasattr(clc, 'SetRequestsSession'):
-            agent_string = "ClcAnsibleModule/" + __version__
-            ses = requests.Session()
-            ses.headers.update({"Api-Client": agent_string})
-            ses.headers['User-Agent'] += " " + agent_string
-            clc.SetRequestsSession(ses)
+    def _set_user_agent(self):
+        # Helpful ansible open_url params
+        # data, headers, http-agent
+        agent_string = 'ClcAnsibleModule/' + __version__
+        self._headers['Api-Client'] = agent_string
+        self._headers['User-Agent'] = 'Python-urllib2/{0} {1}'.format(
+            urllib2.__version__, agent_string)
 
 
 def main():
@@ -521,6 +533,7 @@ def main():
     clc_group = ClcGroup(module)
     clc_group.process_request()
 
-from ansible.module_utils.basic import *  # pylint: disable=W0614
+from ansible.module_utils.basic import *
+from ansible.module_utils.urls import *
 if __name__ == '__main__':
     main()
