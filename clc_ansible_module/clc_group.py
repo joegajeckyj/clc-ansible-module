@@ -1,6 +1,5 @@
 #!/usr/bin/env python
 # -*- coding: utf-8 -*-
-
 # CenturyLink Cloud Ansible Modules.
 #
 # These Ansible modules enable the CenturyLink Cloud v2 API to be called
@@ -326,7 +325,7 @@ class ClcGroup(object):
                                                       group.id))
         except urllib2.HTTPError as ex:
             self.module.fail_json(msg='Failed to delete group :{0}. {1}'.format(
-                group_name, ex.response_text))
+                group_name, ex))
         return response
 
     def _ensure_group_is_present(
@@ -392,7 +391,7 @@ class ClcGroup(object):
                       'parentGroupId': parent.id})
         except urllib2.HTTPError as ex:
             self.module.fail_json(msg='Failed to create group :{0}. {1}'.format(
-                group_name, ex.response_text))
+                group_name, ex))
         return response
 
     def _group_exists(self, group_name, parent_name):
@@ -522,7 +521,7 @@ class ClcGroup(object):
             return
         for request in requests_lst:
             request.read()
-            if not request.code >= 200 and request.code < 300:
+            if request.code < 200 or request.code >= 300:
                 self.module.fail_json(msg='Unable to process group request')
 
 
