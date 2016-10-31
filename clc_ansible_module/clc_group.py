@@ -262,8 +262,6 @@ class ClcGroup(object):
         self.api = clc_ansible_utils.clc.ApiV2(module)
         self.module = module
         self.root_group = None
-        # TODO: Replace group_dict with a true tree of objects
-        self.group_dict = {}
 
         if not CLC_FOUND:
             self.module.fail_json(
@@ -286,7 +284,7 @@ class ClcGroup(object):
         group_description = self.module.params.get('description')
         state = self.module.params.get('state')
 
-        self.group_dict = self._get_group_tree_for_datacenter(
+        self.root_group = self._get_group_tree_for_datacenter(
             datacenter=location)
 
         if state == "absent":
@@ -345,7 +343,8 @@ class ClcGroup(object):
         :return: none
         """
         response = None
-        group, parent = self.group_dict.get(group_name)
+        group = self._group_by_name_recursive(group_name)
+        # TODO: API call to delete group
         try:
             response = group.Delete()
         except CLCException as ex:
@@ -368,36 +367,36 @@ class ClcGroup(object):
             changed:  Boolean- whether a change was made,
             group:  A clc group object for the group
         """
+        # TODO: Check to see how this handles group creation
         assert self.root_group, "Implementation Error: Root Group not set"
-        parent = parent_name if parent_name is not None else self.root_group.name
+        if parent_name is None:
+            parent_name = self.root_group.name
         description = group_description
         changed = False
-        group = group_name
 
-        parent_exists = self._group_exists(group_name=parent, parent_name=None)
+        parent_exists = self._group_exists(group_name=parent_name, parent_name=None)
         child_exists = self._group_exists(
             group_name=group_name,
-            parent_name=parent)
+            parent_name=parent_name)
 
         if parent_exists and child_exists:
-            group, parent = self.group_dict[group_name]
+            group = self._group_by_name_recursive(group_name,
+                                                  parent=parent_name)
             changed = False
         elif parent_exists and not child_exists:
             if not self.module.check_mode:
                 group = self._create_group(
-                    group=group,
-                    parent=parent,
+                    group_name=group_name,
+                    parent_name=parent_name,
                     description=description)
             changed = True
         else:
             self.module.fail_json(
-                msg="parent group: " +
-                parent +
-                " does not exist")
+                msg='parent group: {0} does not exist'.format(parent_name))
 
         return changed, group
 
-    def _create_group(self, group, parent, description):
+    def _create_group(self, group_name, parent_name, description):
         """
         Create the provided server group
         :param group: clc_sdk.Group - the group to create
@@ -406,12 +405,13 @@ class ClcGroup(object):
         :return: clc_sdk.Group - the created group
         """
         response = None
-        (parent, grandparent) = self.group_dict[parent]
+        parent = self._group_by_name_recursive(parent_name)
+        # TODO: API call to create group
         try:
-            response = parent.Create(name=group, description=description)
+            response = parent.Create(name=group_name, description=description)
         except CLCException as ex:
             self.module.fail_json(msg='Failed to create group :{0}. {1}'.format(
-                group, ex.response_text))
+                group_name, ex.response_text))
         return response
 
     def _group_exists(self, group_name, parent_name):
@@ -422,9 +422,10 @@ class ClcGroup(object):
         :return: boolean - whether the group exists
         """
         result = False
-        if group_name in self.group_dict:
-            (group, parent) = self.group_dict[group_name]
-            if parent_name is None or parent_name == parent.name:
+        group = self._group_by_name_recursive(group_name)
+        if group:
+            if ((group.parent is None and parent_name is None) or
+                    group.parent.name == parent_name):
                 result = True
         return result
 
@@ -432,11 +433,10 @@ class ClcGroup(object):
         """
         Walk the tree of groups for a datacenter
         :param datacenter: string - the datacenter to walk (ex: 'UC1')
-        :return: a dictionary of groups and parents
+        :return: Group object for root group containing list of children
         """
         if datacenter is None:
             datacenter = self.api.clc_location
-        # TODO: Remove clc_sdk dependency
         response = self.api.call(
             'GET', '/v2/datacenters/{0}/{1}'.format(self.api.clc_alias,
                                                     datacenter),
@@ -451,20 +451,15 @@ class ClcGroup(object):
             'GET', '/v2/groups/{0}/{1}'.format(self.api.clc_alias,
                                                root_group_id))
 
-        self.group_data = json.loads(response.read())
-        # TODO: Replicate functionality of Group.Subgroups()
-        # Basically iterate through all the groups and save off the info
-        # Need to figure out expected data structure
-
-        #self.root_group = self._group_from_data(self.group_data)
-        self.root_group = self._walk_groups_recursive(None, self.group_data)
+        group_data = json.loads(response.read())
+        return self._walk_groups_recursive(None, group_data)
 
     def _walk_groups_recursive(self, parent_group, group_data):
         """
         Walk a parent-child tree of groups, starting with the provided child group
-        :param parent_group: clc_sdk.Group - the parent group to start the walk
-        :param child_group: clc_sdk.Group - the child group to start the walk
-        :return: a dictionary of groups and parents
+        :param parent_group: clc.Group - Parent of group described by group_data
+        :param group_data: dict - Dict of data from JSON API return
+        :return: Group object from data, containing list of children
         """
         group = self._group_from_data(group_data)
         group.parent = parent_group
@@ -486,15 +481,40 @@ class ClcGroup(object):
                 setattr(group, attr, group_data[attr])
         return group
 
-    def _group_by_name_recursive(self, group_name, group=None):
+    def _group_by_name_recursive(self, group_name, group=None, parent=False):
+        """
+        Returns
+        :param group_name: Name of group to search for
+        :param group: Optional group under which to search
+        :param parent: Optional name (or None if root group) of parent
+        :return:
+        """
         groups = []
         if group is None:
             group = self.root_group
         if group_name == group.name:
-            groups.append(group)
+            # parent for root group is None, so can't use for default value
+            if parent is False:
+                groups.append(group)
+            elif ((group.parent is None and parent is None) or
+                    (group.parent is not None and parent == group.parent.name)):
+                groups.append(group)
         for child_group in group.children:
             groups += self._group_by_name_recursive(group_name, child_group)
-        return groups
+        if len(groups) > 1:
+            # TODO:  More useful output to the user
+            error_message = 'Found {0:%d} groups with name: {1}'.format(
+                len(groups), group_name)
+            if parent is not False:
+                if parent is None:
+                    error_message += ' in root group'
+                else:
+                    error_message = ' in group: {0}'.format(parent)
+            return self.module.fail_json(msg=error_message)
+        elif len(groups) == 1:
+            return groups[0]
+        else:
+            return None
 
     def _group_full_path(self, group, id=False, delimiter=' / '):
         path_elements = []
