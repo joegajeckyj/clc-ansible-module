@@ -348,8 +348,7 @@ class ClcGroup(object):
         response = None
         if parent_name is None:
             parent_name = self.root_group.name
-        group = self._group_by_name_recursive(group_name,
-                                              parent_name=parent_name)
+        group = self._group_by_name(group_name, parent_name=parent_name)
         # TODO: API call to delete group
         try:
             response = group.Delete()
@@ -411,7 +410,7 @@ class ClcGroup(object):
         :return: clc_sdk.Group - the created group
         """
         response = None
-        parent = self._group_by_name_recursive(parent_name)
+        parent = self._group_by_name(parent_name)
         # TODO: API call to create group
         try:
             response = parent.Create(name=group_name, description=description)
@@ -429,10 +428,9 @@ class ClcGroup(object):
         """
         result = False
         if parent_name:
-            group = self._group_by_name_recursive(group_name,
-                                                  parent_name=parent_name)
+            group = self._group_by_name(group_name, parent_name=parent_name)
         else:
-            group = self._group_by_name_recursive(group_name)
+            group = self._group_by_name(group_name)
         if group:
             result = True
         return result
@@ -489,6 +487,23 @@ class ClcGroup(object):
                 setattr(group, attr, group_data[attr])
         return group
 
+    def _group_by_name(self, group_name, group=None, parent_name=None):
+        groups = self._group_by_name_recursive(
+            group_name, group=group, parent_name=parent_name)
+        if len(groups) > 1:
+            # TODO:  More useful output to the user
+            error_message = 'Found {0:%d} groups with name: {1}'.format(
+                len(groups), group_name)
+            if parent_name is None:
+                error_message += ' in root group'
+            else:
+                error_message = ' in group: {0}'.format(parent)
+            return self.module.fail_json(msg=error_message)
+        elif len(groups) == 1:
+            return groups[0]
+        else:
+            return None
+
     def _group_by_name_recursive(self, group_name, group=None,
                                  parent_name=None):
         """
@@ -510,20 +525,7 @@ class ClcGroup(object):
             groups += self._group_by_name_recursive(group_name,
                                                     group=child_group,
                                                     parent_name=parent_name)
-        if len(groups) > 1:
-            # TODO:  More useful output to the user
-            error_message = 'Found {0:%d} groups with name: {1}'.format(
-                len(groups), group_name)
-            if parent is not False:
-                if parent is None:
-                    error_message += ' in root group'
-                else:
-                    error_message = ' in group: {0}'.format(parent)
-            return self.module.fail_json(msg=error_message)
-        elif len(groups) == 1:
-            return groups[0]
-        else:
-            return None
+        return groups
 
     def _group_full_path(self, group, id=False, delimiter=' / '):
         path_elements = []
