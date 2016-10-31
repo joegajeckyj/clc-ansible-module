@@ -467,9 +467,11 @@ class ClcGroup(object):
             error_message = 'Found {0:d} groups with name: \"{1}\"'.format(
                 len(groups), group_name)
             if parent_name is None:
-                error_message += ' in root group'
+                error_message += ' in root group \"{0}\".'.format(
+                    self.root_group.name)
             else:
-                error_message += ' in group: \"{0}\"'.format(parent_name)
+                error_message += ' in group: \"{0}\".'.format(parent_name)
+            error_message += ' Group ids: ' + ', '.join([g.id for g in groups])
             return self.module.fail_json(msg=error_message)
         elif len(groups) == 1:
             return groups[0]
