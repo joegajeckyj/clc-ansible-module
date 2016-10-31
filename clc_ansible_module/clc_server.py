@@ -245,7 +245,6 @@ options:
     choices: [True, False]
 requirements:
     - python = 2.7
-    - requests >= 2.5.0
     - clc-sdk
 author: "CLC Runner (@clc-runner)"
 notes:
@@ -514,14 +513,7 @@ servers:
 __version__ = '${version}'
 
 from time import sleep
-from distutils.version import LooseVersion
-
-try:
-    import requests
-except ImportError:
-    REQUESTS_FOUND = False
-else:
-    REQUESTS_FOUND = True
+import clc_ansible_utils.clc
 
 #
 #  Requires the clc-python-sdk.
@@ -545,6 +537,7 @@ class ClcServer(object):
         """
         Construct module
         """
+        self.api = clc_ansible_utils.clc.ApiV2(module)
         self.clc = clc_sdk
         self.module = module
         self.group_dict = {}
@@ -552,15 +545,6 @@ class ClcServer(object):
         if not CLC_FOUND:
             self.module.fail_json(
                 msg='clc-python-sdk required for this module')
-        if not REQUESTS_FOUND:
-            self.module.fail_json(
-                msg='requests library is required for this module')
-        if requests.__version__ and LooseVersion(
-                requests.__version__) < LooseVersion('2.5.0'):
-            self.module.fail_json(
-                msg='requests library  version should be >= 2.5.0')
-
-        self._set_user_agent(self.clc)
 
     def process_request(self):
         """
@@ -571,7 +555,7 @@ class ClcServer(object):
         new_server_ids = []
         server_dict_array = []
 
-        self._set_clc_credentials_from_env()
+        self.api._set_clc_credentials_from_env()
         self.module.params = self._validate_module_params(
             self.clc,
             self.module)
@@ -725,33 +709,6 @@ class ClcServer(object):
         ]
         return {"argument_spec": argument_spec,
                 "mutually_exclusive": mutually_exclusive}
-
-    def _set_clc_credentials_from_env(self):
-        """
-        Set the CLC Credentials on the sdk by reading environment variables
-        :return: none
-        """
-        env = os.environ
-        v2_api_token = env.get('CLC_V2_API_TOKEN', False)
-        v2_api_username = env.get('CLC_V2_API_USERNAME', False)
-        v2_api_passwd = env.get('CLC_V2_API_PASSWD', False)
-        clc_alias = env.get('CLC_ACCT_ALIAS', False)
-        api_url = env.get('CLC_V2_API_URL', False)
-        if api_url:
-            self.clc.defaults.ENDPOINT_URL_V2 = api_url
-
-        if v2_api_token and clc_alias:
-            self.clc._LOGIN_TOKEN_V2 = v2_api_token
-            self.clc._V2_ENABLED = True
-            self.clc.ALIAS = clc_alias
-        elif v2_api_username and v2_api_passwd:
-            self.clc.v2.SetCredentials(
-                api_username=v2_api_username,
-                api_passwd=v2_api_passwd)
-        else:
-            return self.module.fail_json(
-                msg="You must set the CLC_V2_API_USERNAME and CLC_V2_API_PASSWD "
-                    "environment variables")
 
     @staticmethod
     def _validate_module_params(clc, module):
@@ -1691,15 +1648,6 @@ class ClcServer(object):
                         msg='Unable to connect to the CLC API after {0} attempts. {1}'.format(retries, ce.message))
                 sleep(back_out)
                 back_out *= 2
-
-    @staticmethod
-    def _set_user_agent(clc):
-        if hasattr(clc, 'SetRequestsSession'):
-            agent_string = "ClcAnsibleModule/" + __version__
-            ses = requests.Session()
-            ses.headers.update({"Api-Client": agent_string})
-            ses.headers['User-Agent'] += " " + agent_string
-            clc.SetRequestsSession(ses)
 
 
 def main():

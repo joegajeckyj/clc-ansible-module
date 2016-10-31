@@ -14,7 +14,6 @@
 # limitations under the License.
 
 import unittest
-import requests
 from uuid import UUID
 import clc as clc_sdk
 from clc import CLCException
@@ -32,6 +31,8 @@ class TestClcServerFunctions(unittest.TestCase):
         self.clc = mock.MagicMock()
         self.module = mock.MagicMock()
         self.datacenter = mock.MagicMock()
+        self.server = ClcServer(self.module)
+        self.server.api = mock.MagicMock()
 
     def test_clc_module_not_found(self):
         # Setup Mock Import Function
@@ -49,53 +50,8 @@ class TestClcServerFunctions(unittest.TestCase):
         # Reset
         reload(clc_server)
 
-    def test_requests_invalid_version(self):
-        # Setup Mock Import Function
-        real_import = __import__
-        def mock_import(name, *args):
-            if name == 'requests':
-                args[0]['requests'].__version__ = '2.4.0'
-            return real_import(name, *args)
-        # Under Test
-        with mock.patch('__builtin__.__import__', side_effect=mock_import):
-            reload(clc_server)
-            ClcServer(self.module)
-        # Assert Expected Behavior
-        self.module.fail_json.assert_called_with(msg='requests library  version should be >= 2.5.0')
-
-        # Reset
-        reload(clc_server)
-
-    def test_requests_module_not_found(self):
-        # Setup Mock Import Function
-        real_import = __import__
-        def mock_import(name, *args):
-            if name == 'requests':
-                args[0]['requests'].__version__ = '2.7.0'
-                raise ImportError
-            return real_import(name, *args)
-        # Under Test
-        with mock.patch('__builtin__.__import__', side_effect=mock_import):
-            reload(clc_server)
-            ClcServer(self.module)
-        # Assert Expected Behavior
-        self.module.fail_json.assert_called_with(msg='requests library is required for this module')
-
-        # Reset
-        reload(clc_server)
-
     @patch.object(clc_server, 'clc_sdk')
-    def test_set_user_agent(self, mock_clc_sdk):
-        clc_server.__version__ = "1"
-        ClcServer._set_user_agent(mock_clc_sdk)
-
-        self.assertTrue(mock_clc_sdk.SetRequestsSession.called)
-
-    @patch.object(ClcServer, '_set_clc_credentials_from_env')
-    @patch.object(clc_server, 'clc_sdk')
-    def test_process_request_state_absent(self,
-                                          mock_clc_sdk,
-                                          mock_set_clc_creds):
+    def test_process_request_state_absent(self, mock_clc_sdk):
         # Setup Test
         self.module.params = {
             'state': 'absent',
@@ -139,11 +95,8 @@ class TestClcServerFunctions(unittest.TestCase):
                                                       partially_created_server_ids=[])
         self.assertFalse(self.module.fail_json.called)
 
-    @patch.object(ClcServer, '_set_clc_credentials_from_env')
     @patch.object(clc_server, 'clc_sdk')
-    def test_process_request_exact_count_1_server_w_pubip(self,
-                                                          mock_clc_sdk,
-                                                          mock_set_clc_creds):
+    def test_process_request_exact_count_1_server_w_pubip(self, mock_clc_sdk):
         # Setup Fixture
         self.module.params = {
             'state': 'present',
@@ -221,11 +174,9 @@ class TestClcServerFunctions(unittest.TestCase):
                                                       partially_created_server_ids=[])
         self.assertFalse(self.module.fail_json.called)
 
-    @patch.object(ClcServer, '_set_clc_credentials_from_env')
     @patch.object(clc_server, 'clc_sdk')
-    def test_process_request_exact_count_1_server_w_no_alert_pol_name(self,
-                                                          mock_clc_sdk,
-                                                          mock_set_clc_creds):
+    def test_process_request_exact_count_1_server_w_no_alert_pol_name(
+            self, mock_clc_sdk):
         # Setup Fixture
         self.module.params = {
             'state': 'present',
@@ -298,12 +249,9 @@ class TestClcServerFunctions(unittest.TestCase):
         self.module.fail_json.assert_called_with(msg='No alert policy exist with name : test alert policy')
 
     @patch.object(ClcServer, '_get_alert_policy_id_by_name')
-    @patch.object(ClcServer, '_set_clc_credentials_from_env')
     @patch.object(clc_server, 'clc_sdk')
-    def test_process_request_count_1_server_w_alert_pol_name(self,
-                                                          mock_clc_sdk,
-                                                          mock_set_clc_creds,
-                                                          mock_get_alert_policy):
+    def test_process_request_count_1_server_w_alert_pol_name(
+            self, mock_clc_sdk, mock_get_alert_policy):
         # Setup Fixture
         self.module.params = {
             'state': 'present',
@@ -387,11 +335,8 @@ class TestClcServerFunctions(unittest.TestCase):
                                                       server_ids=['TEST_SERVER'],
                                                       partially_created_server_ids=[])
 
-    @patch.object(ClcServer, '_set_clc_credentials_from_env')
     @patch.object(clc_server, 'clc_sdk')
-    def test_process_request_count_1_bare_metal_server(self,
-                                                          mock_clc_sdk,
-                                                          mock_set_clc_creds):
+    def test_process_request_count_1_bare_metal_server(self, mock_clc_sdk):
         # Setup Fixture
         self.module.params = {
             'state': 'present',
@@ -471,11 +416,9 @@ class TestClcServerFunctions(unittest.TestCase):
                                                       partially_created_server_ids=[])
 
     @patch.object(ClcServer, '_enforce_count')
-    @patch.object(ClcServer, '_set_clc_credentials_from_env')
     @patch.object(clc_server, 'clc_sdk')
     def test_process_request_exact_count_delete_1_server(self,
                                                          mock_clc_sdk,
-                                                         mock_set_clc_creds,
                                                          mock_enforce_count):
         # Setup Fixture
         self.module.params = {
@@ -520,11 +463,8 @@ class TestClcServerFunctions(unittest.TestCase):
                                                       partially_created_server_ids=[])
         self.assertFalse(self.module.fail_json.called)
 
-    @patch.object(ClcServer, '_set_clc_credentials_from_env')
     @patch.object(clc_server, 'clc_sdk')
-    def test_process_request_start_server(self,
-                                          mock_clc_sdk,
-                                          mock_set_clc_creds):
+    def test_process_request_start_server(self, mock_clc_sdk):
         # Setup Fixture
         self.module.params = {
             'state': 'started',
@@ -717,46 +657,6 @@ class TestClcServerFunctions(unittest.TestCase):
         self.module.fail_json.assert_called_with(msg='A failure response was received from CLC API when'
                                                      ' attempting to get details for a server:  '
                                                      'UUID=12345, Code=500, Message=ERROR_MESSAGE')
-
-    def test_clc_set_credentials_w_creds(self):
-        with patch.dict('os.environ', {'CLC_V2_API_USERNAME': 'hansolo', 'CLC_V2_API_PASSWD': 'falcon'}):
-            with patch.object(clc_server, 'clc_sdk') as mock_clc_sdk:
-                under_test = ClcServer(self.module)
-                under_test._set_clc_credentials_from_env()
-
-        mock_clc_sdk.v2.SetCredentials.assert_called_once_with(api_username='hansolo', api_passwd='falcon')
-
-    def test_set_clc_credentials_w_token(self):
-        with patch.dict('os.environ', {'CLC_V2_API_TOKEN': 'Token12345',
-                                       'CLC_ACCT_ALIAS': 'TEST' }):
-            mock_clc_sdk = mock.MagicMock()
-            under_test = ClcServer(self.module)
-            under_test.clc = mock_clc_sdk
-            under_test._set_clc_credentials_from_env()
-            self.assertEqual(mock_clc_sdk._LOGIN_TOKEN_V2, 'Token12345')
-            self.assertFalse(mock_clc_sdk.v2.SetCredentials.called)
-            self.assertEqual(self.module.fail_json.called, False)
-
-    def test_clc_set_credentials_w_no_creds(self):
-        with patch.dict('os.environ', {}, clear=True):
-            under_test = ClcServer(self.module)
-            under_test._set_clc_credentials_from_env()
-
-        self.assertEqual(self.module.fail_json.called, True)
-
-    def test_override_v2_api_url_from_environment(self):
-        original_url = clc_sdk.defaults.ENDPOINT_URL_V2
-        under_test = ClcServer(self.module)
-
-        under_test._set_clc_credentials_from_env()
-        self.assertEqual(clc_sdk.defaults.ENDPOINT_URL_V2, original_url)
-
-        with patch.dict('os.environ', {'CLC_V2_API_URL': 'http://unittest.example.com/'}):
-            under_test._set_clc_credentials_from_env()
-
-        self.assertEqual(clc_sdk.defaults.ENDPOINT_URL_V2, 'http://unittest.example.com/')
-
-        clc_sdk.defaults.ENDPOINT_URL_V2 = original_url
 
     def test_define_argument_spec(self):
         result = ClcServer._define_module_argument_spec()
@@ -1163,9 +1063,8 @@ class TestClcServerFunctions(unittest.TestCase):
         ClcServer._delete_servers(self.module, self.clc, {'id': 'value'})
         self.module.fail_json.assert_called_with(msg='server_ids should be a list of servers, aborting')
 
-    @patch.object(ClcServer, '_set_clc_credentials_from_env')
     @patch.object(ClcServer, '_validate_module_params')
-    def test_process_request_absent_state_w_invalid_servers(self, mock_validate, mock_creds):
+    def test_process_request_absent_state_w_invalid_servers(self, mock_validate):
         params = {
             'state': 'absent',
             'server_ids': {'data': 'invalid'}
@@ -1175,9 +1074,8 @@ class TestClcServerFunctions(unittest.TestCase):
         under_test.process_request()
         self.module.fail_json.assert_called_with(msg="server_ids needs to be a list of instances to delete: {'data': 'invalid'}")
 
-    @patch.object(ClcServer, '_set_clc_credentials_from_env')
     @patch.object(ClcServer, '_validate_module_params')
-    def test_process_request_started_state_w_invalid_servers(self, mock_validate, mock_creds):
+    def test_process_request_started_state_w_invalid_servers(self, mock_validate):
         params = {
             'state': 'started',
             'server_ids': {'data': 'invalid'}
@@ -1187,9 +1085,8 @@ class TestClcServerFunctions(unittest.TestCase):
         under_test.process_request()
         self.module.fail_json.assert_called_with(msg="server_ids needs to be a list of servers to run: {'data': 'invalid'}")
 
-    @patch.object(ClcServer, '_set_clc_credentials_from_env')
     @patch.object(ClcServer, '_validate_module_params')
-    def test_process_request_present_state_w_no_template(self, mock_validate, mock_creds):
+    def test_process_request_present_state_w_no_template(self, mock_validate):
         params = {
             'state': 'present',
             'server_ids': ['id1', 'id2']
