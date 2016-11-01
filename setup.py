@@ -22,15 +22,15 @@ except ImportError:
 
 setup(
     name='clc-ansible-module',
-    version='1.1.17',
+    version='1.2.0',
     description='Centurylink Cloud Ansible Modules',
     author='CenturyLink Cloud',
     author_email='WFAAS-LLFT@centurylink.com',
     url='https://github.com/CenturylinkCloud/clc-ansible-module',
     download_url='https://github.com/CenturylinkCloud/clc-ansible-module.git',
     install_requires=[
-        'ansible==2.0.2.0',
-        'clc-sdk==2.44',
+        'ansible>=2.0.2.0',
+        'clc-sdk>=2.44',
         'future',
         'mock',
         'nose',
