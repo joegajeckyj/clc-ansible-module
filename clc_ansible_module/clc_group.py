@@ -233,7 +233,8 @@ class ClcGroup(object):
         """
         Construct module
         """
-        self.api = clc_ansible_utils.clc.ApiV2(module)
+        self.clc = clc_ansible_utils.clc
+        self.api = self.clc.ApiV2(module)
         self.module = module
         self.root_group = None
 
@@ -388,7 +389,7 @@ class ClcGroup(object):
                 data={'name': group_name, 'description': description,
                       'parentGroupId': parent.id})
             group_data = json.loads(response.read())
-            group = self._group_from_data(group_data)
+            group = self.clc.Group(group_data)
         except urllib2.HTTPError as ex:
             self.module.fail_json(msg='Failed to create group :{0}. {1}'.format(
                 group_name, ex))
@@ -442,25 +443,12 @@ class ClcGroup(object):
         :param group_data: dict - Dict of data from JSON API return
         :return: Group object from data, containing list of children
         """
-        group = self._group_from_data(group_data)
+        group = self.clc.Group(group_data)
         group.parent = parent_group
         for child_data in group_data['groups']:
             if child_data['type'] != 'default':
                 continue
             group.children.append(self._walk_groups_recursive(group, child_data))
-        return group
-
-    def _group_from_data(self, group_data):
-        """
-        Construct a group object that maps JSON dictionary values to attributes
-        :param group_data:
-        :return: An object that contains
-        """
-        group = clc_ansible_utils.clc.Group()
-        group.data = group_data
-        for attr in ['id', 'name', 'description', 'type']:
-            if attr in group_data:
-                setattr(group, attr, group_data[attr])
         return group
 
     def _group_by_name(self, group_name, group=None, parent_name=None):

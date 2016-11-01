@@ -131,10 +131,16 @@ class ApiV2(object):
 
 class Group(object):
 
-    def __init__(self):
+    def __init__(self, group_data):
         self.alias = None
         self.id = None
         self.name = None
         self.description = None
         self.parent = None
         self.children = []
+        if group_data is not None:
+            self.data = group_data
+            for attr in ['id', 'name', 'description', 'type']:
+                if attr in group_data:
+                    setattr(self, attr, group_data[attr])
+
