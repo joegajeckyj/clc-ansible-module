@@ -86,6 +86,14 @@ class ApiV2(object):
                 msg='You must set the CLC_V2_API_USERNAME and '
                     'CLC_V2_API_PASSWD environment variables')
 
+    def authenticate(self):
+        """
+        Public method to authenticate against the API
+        :return:
+        """
+        if not hasattr(self, 'v2_api_token') or not self.v2_api_token:
+            self._set_clc_credentials_from_env()
+
     def call(self, method, url, headers=None, data=None):
         """
         Make a request to the CLC API v2.0
