@@ -554,7 +554,7 @@ class ClcServer(object):
         new_server_ids = []
         server_dict_array = []
 
-        self.api._set_clc_credentials_from_env()
+        self.api.authenticate()
         self.module.params = self._validate_module_params(
             self.clc,
             self.module)
@@ -743,6 +743,21 @@ class ClcServer(object):
             module)
 
         return params
+
+    def _group_defaults(self, group, key):
+        if not hasattr(group, 'defaults'):
+            try:
+                self.api.clc_alias
+            except AttributeError:
+                self.api.authenticate()
+            response = self.api.call(
+                'GET', '/v2/groups/{0}/{1}/defaults'.format(
+                   self.api.clc_alias, group.id))
+            group.defaults = json.load(response.read())
+        try:
+            return group.defaults[key]['value']
+        except (AttributeError, KeyError):
+            return None
 
     @staticmethod
     def _find_datacenter(clc, module):
