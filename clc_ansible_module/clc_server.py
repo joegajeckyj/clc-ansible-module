@@ -512,7 +512,6 @@ servers:
 
 __version__ = '${version}'
 
-from time import sleep
 import clc_ansible_utils.clc
 
 #
@@ -1639,14 +1638,14 @@ class ClcServer(object):
                 if retry_count == 0:
                     return module.fail_json(
                         msg='Unable to reach the CLC API after {0} attempts'.format(retries))
-                sleep(back_out)
+                time.sleep(back_out)
                 back_out *= 2
             except requests.exceptions.ConnectionError as ce:
                 # retry on connection error
                 if retry_count == 0:
                     return module.fail_json(
                         msg='Unable to connect to the CLC API after {0} attempts. {1}'.format(retries, ce.message))
-                sleep(back_out)
+                time.sleep(back_out)
                 back_out *= 2
 
 
