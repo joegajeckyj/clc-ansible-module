@@ -21,6 +21,8 @@ from clc import APIFailedResponse
 import mock
 from mock import patch, create_autospec
 
+from clc_ansible_utils.clc import ClcApiException
+
 import clc_ansible_module.clc_server as clc_server
 from clc_ansible_module.clc_server import ClcServer
 
@@ -1392,12 +1394,13 @@ class TestClcServerFunctions(unittest.TestCase):
 
     @patch.object(clc_server, 'clc_sdk')
     def test_find_alias_exception(self, mock_clc_sdk):
-        error = CLCException()
+        error = ClcApiException()
         error.message = 'Mock fail message'
-        mock_clc_sdk.v2.Account.GetAlias.side_effect = error
         self.module.params = {}
         under_test = ClcServer(self.module)
-        under_test._find_alias(mock_clc_sdk, self.module)
+        under_test.api.authenticate = mock.MagicMock()
+        under_test.api.authenticate.side_effect = error
+        under_test._find_alias()
         self.module.fail_json.assert_called_with(msg='Unable to find account alias. Mock fail message')
 
 

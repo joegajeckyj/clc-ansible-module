@@ -513,6 +513,7 @@ servers:
 __version__ = '${version}'
 
 import clc_ansible_utils.clc
+from clc_ansible_utils.clc import ClcApiException
 
 #
 #  Requires the clc-python-sdk.
@@ -555,9 +556,7 @@ class ClcServer(object):
         server_dict_array = []
 
         self.api.authenticate()
-        self.module.params = self._validate_module_params(
-            self.clc,
-            self.module)
+        self.module.params = self._validate_module_params()
         p = self.module.params
         state = p.get('state')
 
@@ -709,19 +708,21 @@ class ClcServer(object):
         return {"argument_spec": argument_spec,
                 "mutually_exclusive": mutually_exclusive}
 
-    @staticmethod
-    def _validate_module_params(clc, module):
+    def _validate_module_params(self):
         """
         Validate the module params, and lookup default values.
         :param clc: clc-sdk instance to use
         :param module: module to validate
         :return: dictionary of validated params
         """
+        clc = self.clc
+        module = self.module
+        api = self.api
         params = module.params
         datacenter = ClcServer._find_datacenter(clc, module)
 
         # Grab the alias so that we can properly validate server name
-        alias = ClcServer._find_alias(clc, module)
+        alias = self._find_alias()
 
         ClcServer._validate_types(module)
         ClcServer._validate_name(module, alias)
@@ -779,22 +780,23 @@ class ClcServer(object):
                 msg=str(
                     "Unable to find location: {0}".format(location)))
 
-    @staticmethod
-    def _find_alias(clc, module):
+    def _find_alias(self):
         """
         Find or Validate the Account Alias by calling the CLC API
-        :param clc: clc-sdk instance to use
-        :param module: module to validate
-        :return: clc-sdk.Account instance
+        :return: Account alias
         """
-        alias = module.params.get('alias')
+        alias = self.module.params.get('alias')
         if not alias:
             try:
-                alias = clc.v2.Account.GetAlias()
-            except CLCException as ex:
-                module.fail_json(msg='Unable to find account alias. {0}'.format(
-                    ex.message
-                ))
+                alias = self.api.clc_alias
+            except AttributeError:
+                try:
+                    self.api.authenticate()
+                    alias = self.api.clc_alias
+                except ClcApiException as ex:
+                    self.module.fail_json(
+                        msg='Unable to find account alias. {0}'.format(
+                            ex.message))
         return alias
 
     @staticmethod
@@ -1675,5 +1677,6 @@ def main():
     clc_server.process_request()
 
 from ansible.module_utils.basic import *  # pylint: disable=W0614
+from ansible.module_utils.urls import *  # pylint: disable=W0614
 if __name__ == '__main__':
     main()
