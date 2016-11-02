@@ -512,7 +512,7 @@ servers:
 
 __version__ = '${version}'
 
-import clc_ansible_utils.clc
+import clc_ansible_utils.clc as clc_common
 from clc_ansible_utils.clc import ClcApiException
 
 #
@@ -537,7 +537,7 @@ class ClcServer(object):
         """
         Construct module
         """
-        self.api = clc_ansible_utils.clc.ApiV2(module)
+        self.clc_auth = {}
         self.clc = clc_sdk
         self.module = module
         self.group_dict = {}
@@ -555,7 +555,7 @@ class ClcServer(object):
         new_server_ids = []
         server_dict_array = []
 
-        self.api.authenticate()
+        self.clc_auth = clc_common.authenticate(self.module)
         self.module.params = self._validate_module_params()
         p = self.module.params
         state = p.get('state')
@@ -717,7 +717,6 @@ class ClcServer(object):
         """
         clc = self.clc
         module = self.module
-        api = self.api
         params = module.params
         datacenter = ClcServer._find_datacenter(clc, module)
 
@@ -788,15 +787,13 @@ class ClcServer(object):
         alias = self.module.params.get('alias')
         if not alias:
             try:
-                alias = self.api.clc_alias
-            except AttributeError:
-                try:
-                    self.api.authenticate()
-                    alias = self.api.clc_alias
-                except ClcApiException as ex:
-                    self.module.fail_json(
-                        msg='Unable to find account alias. {0}'.format(
-                            ex.message))
+                if 'clc_alias' not in self.clc_auth:
+                    self.clc_auth = clc_common.authenticate(self.module)
+                alias = self.clc_auth['clc_alias']
+            except ClcApiException as ex:
+                self.module.fail_json(
+                    msg='Unable to find account alias. {0}'.format(
+                        ex.message))
         return alias
 
     @staticmethod
