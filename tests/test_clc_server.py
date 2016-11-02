@@ -15,6 +15,7 @@
 
 import unittest
 from uuid import UUID
+import os
 import clc as clc_sdk
 from clc import CLCException
 from clc import APIFailedResponse
@@ -1044,27 +1045,23 @@ class TestClcServerFunctions(unittest.TestCase):
         ClcServer._validate_types(self.module)
         self.module.fail_json.assert_called_with(msg="Hyperscale VMs must have storage_type = 'hyperscale'")
 
-    @patch.object(clc_server, 'clc_sdk')
-    def test_find_ttl(self, mock_clc_sdk):
+    def test_find_ttl(self):
         params = {
             'state': 'present',
             'ttl': 5000
         }
         self.module.params = params
-        mock_clc_sdk.v2.time_utils.SecondsToZuluTS.return_value = 'TTL'
-        res = ClcServer._find_ttl(mock_clc_sdk, self.module)
+        res = ClcServer._find_ttl(self.module)
         self.assertFalse(self.module.fail_json.called)
-        self.assertEqual(res, 'TTL')
 
-    @patch.object(clc_server, 'clc_sdk')
-    def test_find_ttl_exception(self, mock_clc_sdk):
+    @patch.object(clc_server, 'datetime')
+    def test_find_ttl_exception(self, mock_datetime):
         params = {
             'state': 'present',
             'ttl': 1000
         }
         self.module.params = params
-        mock_clc_sdk.v2.time_utils.SecondsToZuluTS.return_value = 'TTL'
-        ClcServer._find_ttl(mock_clc_sdk, self.module)
+        ClcServer._find_ttl(self.module)
         self.module.fail_json.assert_called_with(msg='Ttl cannot be <= 3600')
 
     def test_startstop_servers_invalid_list(self):

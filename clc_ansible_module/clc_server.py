@@ -731,7 +731,7 @@ class ClcServer(object):
         params['cpu'] = ClcServer._find_cpu(clc, module)
         params['memory'] = ClcServer._find_memory(clc, module)
         params['description'] = ClcServer._find_description(module)
-        params['ttl'] = ClcServer._find_ttl(clc, module)
+        params['ttl'] = ClcServer._find_ttl(module)
         params['template'] = ClcServer._find_template_id(module, datacenter)
         params['group'] = ClcServer._find_group(module, datacenter).id
         params['network_id'] = ClcServer._find_network_id(module, datacenter)
@@ -910,7 +910,7 @@ class ClcServer(object):
             module.fail_json(msg=str("min_count can't be greater than max_count"))
 
     @staticmethod
-    def _find_ttl(clc, module):
+    def _find_ttl(module):
         """
         Validate that TTL is > 3600 if set, and fail if not
         :param clc: clc-sdk instance to use
@@ -928,7 +928,9 @@ class ClcServer(object):
         if ttl <= 3600:
             return module.fail_json(msg=str("Ttl cannot be <= 3600"))
         else:
-            ttl = clc.v2.time_utils.SecondsToZuluTS(int(time.time()) + ttl)
+            ttl = (datetime.datetime.utcnow() +
+                   datetime.timedelta(seconds=ttl)).strftime(
+                        '%Y-%m-%dT%H:%M:%SZ')
         return ttl
 
     @staticmethod
