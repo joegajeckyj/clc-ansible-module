@@ -747,16 +747,20 @@ class ClcServer(object):
     def _group_defaults(self, group, key):
         if not hasattr(group, 'defaults'):
             try:
-                self.api.clc_alias
-            except AttributeError:
-                self.api.authenticate()
-            response = self.api.call(
-                'GET', '/v2/groups/{0}/{1}/defaults'.format(
-                   self.api.clc_alias, group.id))
-            group.defaults = json.load(response.read())
+                if 'clc_alias' not in self.clc_auth:
+                    self.clc_auth = clc_common.authenticate(self.module)
+                response = clc_common.call_clc_api(
+                    self.module, self.clc_auth,
+                    'GET', '/groups/{0}/{1}/defaults'.format(
+                        self.clc_auth['clc_alias'], group.id))
+                group.defaults = json.load(response.read())
+            except ClcApiException as ex:
+                self.module.fail_json(
+                    msg='Failed to get group defaults for group: {0}'.format(
+                        group.name))
         try:
             return group.defaults[key]['value']
-        except (AttributeError, KeyError):
+        except KeyError:
             return None
 
     @staticmethod
