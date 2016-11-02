@@ -37,6 +37,10 @@ from ansible.module_utils.basic import *  # pylint: disable=W0614
 from ansible.module_utils.urls import *  # pylint: disable=W0614
 
 
+class ClcApiException(Exception):
+    pass
+
+
 class ApiV2(object):
 
     def __init__(self, module):
@@ -132,7 +136,7 @@ class ApiV2(object):
                                                      url.lstrip('/')),
                                 method=method, headers=headers, data=data)
         except urllib2.HTTPError as ex:
-            raise
+            raise ClcApiException(ex.msg)
 
         return response
 
