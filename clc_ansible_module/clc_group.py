@@ -222,7 +222,8 @@ group:
 
 __version__ = '${version}'
 
-import clc_ansible_utils.clc
+import clc_ansible_utils.clc as clc_common
+from clc_ansible_utils.clc import ClcApiException
 
 
 class ClcGroup(object):
@@ -233,8 +234,7 @@ class ClcGroup(object):
         """
         Construct module
         """
-        self.clc = clc_ansible_utils.clc
-        self.api = self.clc.ApiV2(module)
+        self.clc_auth = {}
         self.module = module
         self.root_group = None
 
@@ -250,7 +250,7 @@ class ClcGroup(object):
         state = self.module.params.get('state')
 
         # TODO: Initialize credentials from non-private method
-        self.api._set_clc_credentials_from_env()
+        self.clc_auth = clc_common.authenticate(self.module)
         self.root_group = self._get_group_tree_for_datacenter(
             datacenter=location)
 
@@ -319,12 +319,13 @@ class ClcGroup(object):
         group = self._group_by_name(group_name, parent_name=parent_name)
         # TODO: Check for proper HTTP response code
         try:
-            response = self.api.call(
-                'DELETE', '/v2/groups/{0}/{1}'.format(self.api.clc_alias,
-                                                      group.id))
-        except urllib2.HTTPError as ex:
+            response = clc_common.call_clc_api(
+                self.module, self.clc_auth,
+                'DELETE', '/groups/{0}/{1}'.format(
+                    self.clc_auth['clc_alias'], group.id))
+        except ClcApiException as ex:
             self.module.fail_json(msg='Failed to delete group :{0}. {1}'.format(
-                group_name, ex))
+                group_name, ex.message))
         return response
 
     def _ensure_group_is_present(
@@ -384,15 +385,16 @@ class ClcGroup(object):
             description = group_name
         # TODO: Check for proper HTTP response code
         try:
-            response = self.api.call(
-                'POST', '/v2/groups/{0}'.format(self.api.clc_alias),
+            response = clc_common.call_clc_api(
+                self.module, self.clc_auth,
+                'POST', '/groups/{0}'.format(self.clc_auth['clc_alias']),
                 data={'name': group_name, 'description': description,
                       'parentGroupId': parent.id})
             group_data = json.loads(response.read())
-            group = self.clc.Group(group_data)
-        except urllib2.HTTPError as ex:
+            group = clc_common.Group(group_data)
+        except ClcApiException as ex:
             self.module.fail_json(msg='Failed to create group :{0}. {1}'.format(
-                group_name, ex))
+                group_name, ex.message))
         return group
 
     def _group_exists(self, group_name, parent_name):
@@ -418,10 +420,11 @@ class ClcGroup(object):
         :return: Group object for root group containing list of children
         """
         if datacenter is None:
-            datacenter = self.api.clc_location
-        response = self.api.call(
-            'GET', '/v2/datacenters/{0}/{1}'.format(self.api.clc_alias,
-                                                    datacenter),
+            datacenter = self.clc_auth['clc_location']
+        response = clc_common.call_clc_api(
+            self.module, self.clc_auth,
+            'GET', '/datacenters/{0}/{1}'.format(
+                self.clc_auth['clc_alias'], datacenter),
             data={'GroupLinks': 'true'})
 
         r = json.loads(response.read())
@@ -429,9 +432,10 @@ class ClcGroup(object):
                                           for obj in r['links']
                                           if obj['rel'] == "group"][0]
 
-        response = self.api.call(
-            'GET', '/v2/groups/{0}/{1}'.format(self.api.clc_alias,
-                                               root_group_id))
+        response = clc_common.call_clc_api(
+            self.module, self.clc_auth,
+            'GET', '/groups/{0}/{1}'.format(
+                self.clc_auth['clc_alias'], root_group_id))
 
         group_data = json.loads(response.read())
         return self._walk_groups_recursive(None, group_data)
@@ -443,7 +447,7 @@ class ClcGroup(object):
         :param group_data: dict - Dict of data from JSON API return
         :return: Group object from data, containing list of children
         """
-        group = self.clc.Group(group_data)
+        group = clc_common.Group(group_data)
         group.parent = parent_group
         for child_data in group_data['groups']:
             if child_data['type'] != 'default':
