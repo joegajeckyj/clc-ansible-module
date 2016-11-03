@@ -1,4 +1,5 @@
 #!/usr/bin/env python
+# -*- coding: utf-8 -*-
 
 # CenturyLink Cloud Ansible Modules.
 #
@@ -540,7 +541,7 @@ class ClcServer(object):
         self.clc_auth = {}
         self.clc = clc_sdk
         self.module = module
-        self.group_dict = {}
+        self.root_group = None
 
         if not CLC_FOUND:
             self.module.fail_json(
@@ -613,7 +614,8 @@ class ClcServer(object):
         wait = self.module.params.get('wait')
         if wait:
             datacenter = self._find_datacenter(self.clc, self.module)
-            group = ClcServer._find_group(module=self.module, datacenter=datacenter, lookup_group=p.get('group'))
+            group = self._find_group(datacenter, lookup_group=p.get('group'))
+            # TODO: Get servers for group
             servers = group.Servers().Servers()
             group = group.data
             group['servers'] = [s.id for s in servers]
@@ -723,17 +725,20 @@ class ClcServer(object):
         # Grab the alias so that we can properly validate server name
         alias = self._find_alias()
 
+        root_group = clc_common.group_tree(self.module, self.clc_auth,
+                                           alias=alias, datacenter=datacenter)
+
         ClcServer._validate_types(module)
         ClcServer._validate_name(module, alias)
         ClcServer._validate_counts(module)
 
         params['alias'] = alias
+        params['group'] = self._find_group(datacenter).id
         params['cpu'] = ClcServer._find_cpu(clc, module)
         params['memory'] = ClcServer._find_memory(clc, module)
         params['description'] = ClcServer._find_description(module)
         params['ttl'] = ClcServer._find_ttl(module)
         params['template'] = ClcServer._find_template_id(module, datacenter)
-        params['group'] = ClcServer._find_group(module, datacenter).id
         params['network_id'] = ClcServer._find_network_id(module, datacenter)
         params['anti_affinity_policy_id'] = ClcServer._find_aa_policy_id(
             clc,
@@ -1157,7 +1162,7 @@ class ClcServer(object):
                 msg="you must use the 'count_group option with max_count")
 
         servers, running_servers = self._find_running_servers_by_group(
-            module, datacenter, count_group)
+            datacenter, count_group)
 
         if exact_count:
             if len(running_servers) < exact_count:
@@ -1445,8 +1450,7 @@ class ClcServer(object):
                     server.id))
         return result
 
-    @staticmethod
-    def _find_running_servers_by_group(module, datacenter, count_group):
+    def _find_running_servers_by_group(self, datacenter, count_group):
         """
         Find a list of running servers in the provided group
         :param module: the AnsibleModule object
@@ -1454,8 +1458,7 @@ class ClcServer(object):
         :param count_group: the group to count the servers
         :return: list of servers, and list of running servers
         """
-        group = ClcServer._find_group(
-            module=module,
+        group = self._find_group(
             datacenter=datacenter,
             lookup_group=count_group)
 
@@ -1464,60 +1467,29 @@ class ClcServer(object):
 
         return servers, running_servers
 
-    @staticmethod
-    def _find_group(module, datacenter, lookup_group=None):
+    def _find_group(self, datacenter, lookup_group=None):
         """
         Find a server group in a datacenter by calling the CLC API
-        :param module: the AnsibleModule instance
-        :param datacenter: clc-sdk.Datacenter instance to search for the group
+        :param datacenter: Datacenter identifier to search for the group
         :param lookup_group: string name of the group to search for
         :return: clc-sdk.Group instance
         """
+        result = None
         if not lookup_group:
-            lookup_group = module.params.get('group')
+            lookup_group = self.module.params.get('group')
         try:
-            return datacenter.Groups().Get(lookup_group)
-        except CLCException:
+            if not self.root_group:
+                self.root_group = clc_common.group_tree(
+                    self.module, self.clc_auth, datacenter=datacenter)
+            result = clc_common.find_group(self.module, self.root_group,
+                                           lookup_group)
+        except ClcApiException:
             pass
 
-        # The search above only acts on the main
-        result = ClcServer._find_group_recursive(
-            module,
-            datacenter.Groups(),
-            lookup_group)
-
         if result is None:
-            module.fail_json(
-                msg=str(
-                    "Unable to find group: " +
-                    lookup_group +
-                    " in location: " +
-                    datacenter.id))
-
-        return result
-
-    @staticmethod
-    def _find_group_recursive(module, group_list, lookup_group):
-        """
-        Find a server group by recursively walking the tree
-        :param module: the AnsibleModule instance to use
-        :param group_list: a list of groups to search
-        :param lookup_group: the group to look for
-        :return: list of groups
-        """
-        result = None
-        for group in group_list.groups:
-            subgroups = group.Subgroups()
-            try:
-                return subgroups.Get(lookup_group)
-            except CLCException:
-                result = ClcServer._find_group_recursive(
-                    module,
-                    subgroups,
-                    lookup_group)
-
-            if result is not None:
-                break
+            self.module.fail_json(
+                msg='Unable to find group: {0} in location: {1}'.format(
+                    lookup_group, datacenter))
 
         return result
 

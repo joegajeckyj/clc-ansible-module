@@ -722,27 +722,41 @@ class TestClcServerFunctions(unittest.TestCase):
         # assert result
         self.clc.v2.Datacenter.assert_called_once_with("MyMockGroup")
 
-    def test_find_group_w_lookup_group(self):
+    @patch.object(clc_common, 'find_group')
+    @patch.object(clc_common, 'group_tree')
+    def test_find_group_w_lookup_group(self, mock_group_tree, mock_find_group):
         # Setup
-        self.datacenter.Groups().Get = mock.MagicMock()
+        mock_rootgroup = mock.MagicMock()
+        clc_common.group_tree.return_value = mock_rootgroup
 
         # Function Under Test
-        result_group = ClcServer._find_group(self.module, self.datacenter, "MyCoolGroup")
+        under_test = ClcServer(self.module)
+        result_group = under_test._find_group(self.datacenter, "MyCoolGroup")
 
         # Assert Result
+        clc_common.find.group.assert_called_once_with(
+            self.module, mock_rootgroup,
+            'MyCoolGroup')
         self.datacenter.Groups().Get.assert_called_once_with("MyCoolGroup")
         self.assertEqual(self.module.called, False)
 
-    def test_find_group_w_no_lookup_group(self):
+    @patch.object(clc_common, 'find_group')
+    @patch.object(clc_common, 'group_tree')
+    def test_find_group_w_no_lookup_group(self, mock_group_tree,
+                                          mock_find_group):
         # Setup
-        self.datacenter.Groups().Get = mock.MagicMock()
+        mock_rootgroup = mock.MagicMock()
         self.module.params = {'group': "DefaultGroupFromModuleParamsLookup"}
+        clc_common.group_tree.return_value = mock_rootgroup
 
         # Function Under Test
-        result_group = ClcServer._find_group(self.module, self.datacenter)
+        under_test = ClcServer(self.module)
+        result_group = under_test._find_group(self.datacenter)
 
         # Assert Result
-        self.datacenter.Groups().Get.assert_called_once_with("DefaultGroupFromModuleParamsLookup")
+        clc_common.find_group.assert_called_once_with(
+            self.module, mock_rootgroup,
+            'DefaultGroupFromModuleParamsLookup')
 
     @patch.object(clc_server, 'clc_sdk')
     def test_find_group_w_recursive_lookup(self,
@@ -769,8 +783,7 @@ class TestClcServerFunctions(unittest.TestCase):
 
         # Test
         under_test = ClcServer(self.module)
-        result = under_test._find_group(module=self.module,
-                                        datacenter=mock_datacenter,
+        result = under_test._find_group(datacenter=mock_datacenter,
                                         lookup_group="TEST_RECURSIVE_GRP")
         # Assert
         self.assertEqual(mock_group_to_find, result)
@@ -997,7 +1010,7 @@ class TestClcServerFunctions(unittest.TestCase):
         mock_dc.id = 'testdc'
         mock_dc.Groups().Get.side_effect = CLCException()
         under_test = ClcServer(self.module)
-        ret = under_test._find_group(self.module, mock_dc, 'lookup_group')
+        ret = under_test._find_group(mock_dc, 'lookup_group')
         self.module.fail_json.assert_called_with(msg='Unable to find group: lookup_group in location: testdc')
         self.assertEqual(ret, None)
 
