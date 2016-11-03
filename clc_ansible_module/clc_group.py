@@ -317,7 +317,7 @@ class ClcGroup(object):
         if parent_name is None:
             parent_name = self.root_group.name
         group = clc_common.find_group(self.module, self.root_group,
-                                      group_name, parent_name=parent_name)
+                                      group_name, parent_info=parent_name)
         # TODO: Check for proper HTTP response code
         try:
             response = clc_common.call_clc_api(
@@ -357,7 +357,7 @@ class ClcGroup(object):
 
         if parent_exists and child_exists:
             group = clc_common.find_group(self.module, self.root_group,
-                                          group_name, parent_name=parent_name)
+                                          group_name, parent_info=parent_name)
             changed = False
         elif parent_exists and not child_exists:
             if not self.module.check_mode:
@@ -410,7 +410,7 @@ class ClcGroup(object):
         result = False
         if parent_name:
             group = clc_common.find_group(self.module, self.root_group,
-                                          group_name, parent_name=parent_name)
+                                          group_name, parent_info=parent_name)
         else:
             group = clc_common.find_group(self.module, self.root_group,
                                           group_name)
