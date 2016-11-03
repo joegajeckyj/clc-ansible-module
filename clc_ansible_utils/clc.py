@@ -174,7 +174,7 @@ def _walk_groups(parent_group, group_data):
     return group
 
 
-def group_tree(module, clc_auth, datacenter=None):
+def group_tree(module, clc_auth, alias=None, datacenter=None):
     """
     Walk the tree of groups for a datacenter
     :param module: Ansible module being called
@@ -184,10 +184,12 @@ def group_tree(module, clc_auth, datacenter=None):
     """
     if datacenter is None:
         datacenter = clc_auth['clc_location']
+    if alias is None:
+        alias = clc_auth['clc_alias']
     response = call_clc_api(
         module, clc_auth,
         'GET', '/datacenters/{0}/{1}'.format(
-            clc_auth['clc_alias'], datacenter),
+            alias, datacenter),
         data={'GroupLinks': 'true'})
 
     r = json.loads(response.read())
@@ -198,50 +200,52 @@ def group_tree(module, clc_auth, datacenter=None):
     response = call_clc_api(
         module, clc_auth,
         'GET', '/groups/{0}/{1}'.format(
-            clc_auth['clc_alias'], root_group_id))
+            alias, root_group_id))
 
     group_data = json.loads(response.read())
     return _walk_groups(None, group_data)
 
 
-def _find_group_recursive(search_group, group_name, parent_name=None):
+def _find_group_recursive(search_group, group_info, parent_info=None):
     """
     :param search_group: Group under which to search
-    :param group_name: Name of group to search for
-    :param parent_name: Optional name of parent
+    :param group_info: Name or id of group to search for
+    :param parent_info: Optional name or id of parent
     :return: List of groups found matching the described parameters
     """
     groups = []
-    if group_name == search_group.name:
-        if parent_name is None:
+    if group_info.lower() in [search_group.id.lower(),
+                              search_group.name.lower()]:
+        if parent_info is None:
             groups.append(search_group)
         elif (search_group.parent is not None and
-                parent_name == search_group.parent.name):
+                parent_info in [search_group.parent.id,
+                                search_group.parent.name]):
             groups.append(search_group)
     for child_group in search_group.children:
-        groups += _find_group_recursive(child_group, group_name,
-                                        parent_name=parent_name)
+        groups += _find_group_recursive(child_group, group_info,
+                                        parent_info=parent_info)
     return groups
 
 
-def find_group(module, search_group, group_name, parent_name=None):
+def find_group(module, search_group, group_info, parent_info=None):
     """
     :param module: Ansible module being called
     :param search_group: Group under which to search
-    :param group_name: Name of group to search form
-    :param parent_name:  Optional name of parent
+    :param group_info: Name or id of group to search for
+    :param parent_info:  Optional name or id of parent
     :return: Group object found, or None if no groups found.
     Will return an error if multiple groups found matching parameters.
     """
     groups = _find_group_recursive(
-        search_group, group_name, parent_name=parent_name)
+        search_group, group_info, parent_info=parent_info)
     if len(groups) > 1:
         error_message = 'Found {0:d} groups with name: \"{1}\"'.format(
-            len(groups), group_name)
-        if parent_name is None:
+            len(groups), group_info)
+        if parent_info is None:
             error_message += ', no parent group specified.'
         else:
-            error_message += ' in group: \"{0}\".'.format(parent_name)
+            error_message += ' in group: \"{0}\".'.format(parent_info)
         error_message += ' Group ids: ' + ', '.join([g.id for g in groups])
         return module.fail_json(msg=error_message)
     elif len(groups) == 1:
