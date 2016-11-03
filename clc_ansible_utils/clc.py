@@ -174,7 +174,7 @@ def _walk_groups(parent_group, group_data):
     return group
 
 
-def group_tree(module, clc_auth, datacenter=None):
+def group_tree(module, clc_auth, alias=None, datacenter=None):
     """
     Walk the tree of groups for a datacenter
     :param module: Ansible module being called
@@ -184,10 +184,12 @@ def group_tree(module, clc_auth, datacenter=None):
     """
     if datacenter is None:
         datacenter = clc_auth['clc_location']
+    if alias is None:
+        alias = clc_auth['clc_alias']
     response = call_clc_api(
         module, clc_auth,
         'GET', '/datacenters/{0}/{1}'.format(
-            clc_auth['clc_alias'], datacenter),
+            alias, datacenter),
         data={'GroupLinks': 'true'})
 
     r = json.loads(response.read())
@@ -198,7 +200,7 @@ def group_tree(module, clc_auth, datacenter=None):
     response = call_clc_api(
         module, clc_auth,
         'GET', '/groups/{0}/{1}'.format(
-            clc_auth['clc_alias'], root_group_id))
+            alias, root_group_id))
 
     group_data = json.loads(response.read())
     return _walk_groups(None, group_data)
