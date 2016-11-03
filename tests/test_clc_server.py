@@ -694,9 +694,9 @@ class TestClcServerFunctions(unittest.TestCase):
         self.datacenter.Groups().Get.return_value = mock_group
 
         # Function Under Test
-        result_servers, result_runningservers = ClcServer._find_running_servers_by_group(self.module,
-                                                                                         self.datacenter,
-                                                                                         "MyCoolGroup")
+        under_test = ClcServer(self.module)
+        result_servers, result_runningservers = under_test._find_running_servers_by_group(self.datacenter,
+                                                                                          "MyCoolGroup")
 
         # Results
         self.assertEqual(len(result_servers), 2)
@@ -734,7 +734,7 @@ class TestClcServerFunctions(unittest.TestCase):
         result_group = under_test._find_group(self.datacenter, "MyCoolGroup")
 
         # Assert Result
-        clc_common.find.group.assert_called_once_with(
+        clc_common.find_group.assert_called_once_with(
             self.module, mock_rootgroup,
             'MyCoolGroup')
         self.datacenter.Groups().Get.assert_called_once_with("MyCoolGroup")
@@ -1003,9 +1003,7 @@ class TestClcServerFunctions(unittest.TestCase):
         under_test._find_datacenter(mock_clc_sdk, self.module)
         self.module.fail_json.assert_called_with(msg='Unable to find location: testdc')
 
-    @patch.object(ClcServer, '_find_group_recursive')
-    def test_find_group_no_result(self, mock_find_recursive):
-        mock_find_recursive.return_value = None
+    def test_find_group_no_result(self):
         mock_dc = mock.MagicMock()
         mock_dc.id = 'testdc'
         mock_dc.Groups().Get.side_effect = CLCException()

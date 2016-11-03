@@ -615,10 +615,13 @@ class ClcServer(object):
         if wait:
             datacenter = self._find_datacenter(self.clc, self.module)
             group = self._find_group(datacenter, lookup_group=p.get('group'))
-            # TODO: Get servers for group
+            # TODO: Get servers for group and fix return JSON value
             servers = group.Servers().Servers()
-            group = group.data
-            group['servers'] = [s.id for s in servers]
+            try:
+                group = group.data
+                group['servers'] = [s.id for s in servers]
+            except AttributeError:
+                group = group.name
 
         self.module.exit_json(
             changed=changed,
@@ -1474,24 +1477,24 @@ class ClcServer(object):
         :param lookup_group: string name of the group to search for
         :return: clc-sdk.Group instance
         """
-        result = None
+        group = None
         if not lookup_group:
             lookup_group = self.module.params.get('group')
         try:
             if not self.root_group:
                 self.root_group = clc_common.group_tree(
                     self.module, self.clc_auth, datacenter=datacenter)
-            result = clc_common.find_group(self.module, self.root_group,
-                                           lookup_group)
+            group = clc_common.find_group(self.module, self.root_group,
+                                          lookup_group)
         except ClcApiException:
             pass
 
-        if result is None:
+        if group is None:
             self.module.fail_json(
                 msg='Unable to find group: {0} in location: {1}'.format(
                     lookup_group, datacenter))
 
-        return result
+        return group
 
     @staticmethod
     def _create_clc_server(
