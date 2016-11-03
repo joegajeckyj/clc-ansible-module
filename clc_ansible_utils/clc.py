@@ -43,13 +43,18 @@ class ClcApiException(Exception):
 
 class Group(object):
 
-    def __init__(self):
+    def __init__(self, group_data):
         self.alias = None
         self.id = None
         self.name = None
         self.description = None
         self.parent = None
         self.children = []
+        if group_data is not None:
+            self.data = group_data
+            for attr in ['id', 'name', 'description', 'type']:
+                if attr in group_data:
+                    setattr(self, attr, group_data[attr])
 
 
 def _default_headers():
@@ -66,11 +71,13 @@ def _default_headers():
 def call_clc_api(module, clc_auth, method, url, headers=None, data=None):
     """
     Make a request to the CLC API v2.0
-    :param method:
-    :param url:
-    :param headers:
-    :param data:
-    :return response:
+    :param module: Ansible module being called
+    :param clc_auth: dict containing the needed parameters for authentication
+    :param method: HTTP method
+    :param url: URL string to be appended to root api_url
+    :param headers: Headers to be added to request
+    :param data: Data to be sent with request
+    :return response: HTTP response from urllib2.urlopen
     """
     if not isinstance(url, str) or not isinstance(url, basestring):
         raise TypeError('URL for API request must be a string')
@@ -149,3 +156,113 @@ def authenticate(module):
             msg='You set the CLC_V2_API_USERNAME and '
                 'CLC_V2_API_PASSWD environment variables')
     return clc_auth
+
+
+def _walk_groups(parent_group, group_data):
+    """
+    Walk a parent-child tree of groups, starting with the provided child group
+    :param parent_group: Group - Parent of group described by group_data
+    :param group_data: dict - Dict of data from JSON API return
+    :return: Group object from data, containing list of children
+    """
+    group = Group(group_data)
+    group.parent = parent_group
+    for child_data in group_data['groups']:
+        if child_data['type'] != 'default':
+            continue
+        group.children.append(_walk_groups(group, child_data))
+    return group
+
+
+def group_tree(module, clc_auth, datacenter=None):
+    """
+    Walk the tree of groups for a datacenter
+    :param module: Ansible module being called
+    :param clc_auth: dict containing the needed parameters for authentication
+    :param datacenter: string - the datacenter to walk (ex: 'UC1')
+    :return: Group object for root group containing list of children
+    """
+    if datacenter is None:
+        datacenter = clc_auth['clc_location']
+    response = call_clc_api(
+        module, clc_auth,
+        'GET', '/datacenters/{0}/{1}'.format(
+            clc_auth['clc_alias'], datacenter),
+        data={'GroupLinks': 'true'})
+
+    r = json.loads(response.read())
+    root_group_id, root_group_name = [(obj['id'], obj['name'])
+                                      for obj in r['links']
+                                      if obj['rel'] == "group"][0]
+
+    response = call_clc_api(
+        module, clc_auth,
+        'GET', '/groups/{0}/{1}'.format(
+            clc_auth['clc_alias'], root_group_id))
+
+    group_data = json.loads(response.read())
+    return _walk_groups(None, group_data)
+
+
+def _find_group_recursive(search_group, group_name, parent_name=None):
+    """
+    :param search_group: Group under which to search
+    :param group_name: Name of group to search for
+    :param parent_name: Optional name of parent
+    :return: List of groups found matching the described parameters
+    """
+    groups = []
+    if group_name == search_group.name:
+        if parent_name is None:
+            groups.append(search_group)
+        elif (search_group.parent is not None and
+                parent_name == search_group.parent.name):
+            groups.append(search_group)
+    for child_group in search_group.children:
+        groups += _find_group_recursive(child_group, group_name,
+                                        parent_name=parent_name)
+    return groups
+
+
+def find_group(module, search_group, group_name, parent_name=None):
+    """
+    :param module: Ansible module being called
+    :param search_group: Group under which to search
+    :param group_name: Name of group to search form
+    :param parent_name:  Optional name of parent
+    :return: Group object found, or None if no groups found.
+    Will return an error if multiple groups found matching parameters.
+    """
+    groups = _find_group_recursive(
+        search_group, group_name, parent_name=parent_name)
+    if len(groups) > 1:
+        error_message = 'Found {0:d} groups with name: \"{1}\"'.format(
+            len(groups), group_name)
+        if parent_name is None:
+            error_message += ', no parent group specified.'
+        else:
+            error_message += ' in group: \"{0}\".'.format(parent_name)
+        error_message += ' Group ids: ' + ', '.join([g.id for g in groups])
+        return module.fail_json(msg=error_message)
+    elif len(groups) == 1:
+        return groups[0]
+    else:
+        return None
+
+
+def group_path(group, group_id=False, delimiter='/'):
+    """
+    :param group: Group object for which to show full ancestry
+    :param group_id: Optional flag to show group id hierarchy
+    :param delimiter: Optional delimiter
+    :return:
+    """
+    path_elements = []
+    while group is not None:
+        if group_id:
+            path_elements.append(group.id)
+        else:
+            path_elements.append(group.name)
+        group = group.parent
+    return delimiter.join(reversed(path_elements))
+
