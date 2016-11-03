@@ -187,7 +187,7 @@ def group_tree(module, clc_auth, datacenter=None):
     response = call_clc_api(
         module, clc_auth,
         'GET', '/datacenters/{0}/{1}'.format(
-            self.clc_auth['clc_alias'], datacenter),
+            clc_auth['clc_alias'], datacenter),
         data={'GroupLinks': 'true'})
 
     r = json.loads(response.read())
