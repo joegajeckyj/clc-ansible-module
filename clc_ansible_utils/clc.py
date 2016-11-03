@@ -57,6 +57,20 @@ class Group(object):
                     setattr(self, attr, group_data[attr])
 
 
+class Server(object):
+
+    def __init__(self, server_data):
+        self.id = None
+        self.name = None
+        self.description = None
+        if server_data is not None:
+            self.data = server_data
+            for attr in ['id', 'name', 'description', 'status',
+                         'locationId', 'groupId']:
+                if attr in server_data:
+                    setattr(self, attr, server_data[attr])
+
+
 def _default_headers():
     # Helpful ansible open_url params
     # data, headers, http-agent
@@ -270,3 +284,39 @@ def group_path(group, group_id=False, delimiter='/'):
         group = group.parent
     return delimiter.join(reversed(path_elements))
 
+
+def _find_server(module, clc_auth, server_id):
+    """
+    Find server information based on server_id
+    :param module: Ansible module being called
+    :param clc_auth: dict containing the needed parameters for authentication
+    :param server_id: ID for server for which to retrieve data
+    :return: Server object
+    """
+    try:
+        response = call_clc_api(
+            module, clc_auth,
+            'GET', 'servers/{0}/{1}'.format(
+                clc_auth['clc_alias'], server_id))
+        server = Server(json.loads(response.read()))
+        return server
+    except ClcApiException as ex:
+        return module.fail_json(
+            msg='Failed to get server information '
+                'for server id: {0}:'.format(server_id))
+
+
+def servers_in_group(module, clc_auth, group):
+    """
+    Return a list of servers from
+    :param module:
+    :param clc_auth:
+    :param group:
+    :return:
+    """
+    server_lst = [obj['id'] for obj in group.data['links'] if
+                  obj['rel'] == 'server']
+    servers = []
+    for server_id in server_lst:
+        servers.append(_find_server(module, clc_auth, server_id))
+    return servers
