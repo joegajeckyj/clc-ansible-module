@@ -743,7 +743,7 @@ class ClcServer(object):
         params['description'] = ClcServer._find_description(module)
         params['ttl'] = ClcServer._find_ttl(module)
         params['template'] = self._find_template_id(datacenter)
-        params['network_id'] = ClcServer._find_network_id(module, datacenter)
+        params['network_id'] = self._find_network_id(datacenter)
         params['anti_affinity_policy_id'] = ClcServer._find_aa_policy_id(
             clc,
             module)
