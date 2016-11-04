@@ -789,27 +789,39 @@ class TestClcServerFunctions(unittest.TestCase):
         # Assert
         self.assertEqual(mock_group_to_find, result)
 
-    def test_find_template(self):
-        self.module.params = {"template": "MyCoolTemplate", "state": "present"}
-        self.datacenter.Templates().Search = mock.MagicMock()
-
+    @patch.object(clc_common, 'call_clc_api')
+    def test_find_template(self, mock_call_api):
         # Function Under Test
-        result_template = ClcServer._find_template_id(module=self.module, datacenter=self.datacenter)
+        under_test = ClcServer(self.module)
+        under_test.module.params = {"template": "MyCoolTemplate",
+                                    "state": "present"}
+        datacenter = 'mock_datacenter'
+        clc_auth = {'clc_alias': 'mock_alias'}
+        under_test.clc_auth = clc_auth
+        result_template = under_test._find_template_id(datacenter)
 
         # Assert Result
-        self.datacenter.Templates().Search.assert_called_once_with("MyCoolTemplate")
+        mock_call_api.assert_called_once_with(
+            under_test.module, under_test.clc_auth, 'GET',
+            '/datacenters/mock_alias/mock_datacenter/deploymentCapabilities')
         self.assertEqual(self.module.fail_json.called, False)
 
-    def test_find_template_not_found(self):
-        self.module.params = {"template": "MyCoolTemplateNotFound", "state": "present"}
-        self.datacenter.Templates().Search = mock.MagicMock(side_effect=clc_sdk.CLCException("Template not found"))
-
+    @patch.object(clc_common, 'call_clc_api')
+    def test_find_template_not_found(self, mock_call_api):
         # Function Under Test
-        result_template = ClcServer._find_template_id(module=self.module, datacenter=self.datacenter)
+        under_test = ClcServer(self.module)
+        under_test.module.params = {"template": "MyCoolTemplateNotFound",
+                                    "state": "present"}
+        clc_auth = {'clc_alias': 'mock_alias'}
+        datacenter = 'mock_datacenter'
+        under_test.clc_auth = clc_auth
+        result_template = under_test._find_template_id(datacenter)
 
         # Assert Result
-        self.datacenter.Templates().Search.assert_called_once_with("MyCoolTemplateNotFound")
-        self.assertEqual(self.module.fail_json.called, True)
+        mock_call_api.assert_called_once_with(
+            under_test.module, under_test.clc_auth, 'GET',
+            '/datacenters/mock_alias/mock_datacenter/deploymentCapabilities')
+        self.assertIsNone(result_template)
 
     def test_find_network_id_default(self):
         # Setup
@@ -961,7 +973,7 @@ class TestClcServerFunctions(unittest.TestCase):
     @patch.object(clc_common, 'call_clc_api')
     def test_find_aa_policy_id_get_fail(self, mock_call_api):
         error = ClcApiException()
-        error.response_text = 'Mock failure message'
+        error.message = 'Mock failure message'
         mock_call_api.side_effect = error
         under_test = ClcServer(self.module)
         under_test.clc_auth = {'clc_alias': 'mock_alias'}
