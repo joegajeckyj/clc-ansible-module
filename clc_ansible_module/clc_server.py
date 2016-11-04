@@ -744,9 +744,7 @@ class ClcServer(object):
         params['ttl'] = ClcServer._find_ttl(module)
         params['template'] = self._find_template_id(datacenter)
         params['network_id'] = self._find_network_id(datacenter)
-        params['anti_affinity_policy_id'] = ClcServer._find_aa_policy_id(
-            clc,
-            module)
+        params['anti_affinity_policy_id'] = self._find_aa_policy_id()
         params['alert_policy_id'] = ClcServer._find_alert_policy_id(
             clc,
             module)
@@ -1006,26 +1004,47 @@ class ClcServer(object):
                     "Unable to find a network in location: " +
                     datacenter))
 
-    @staticmethod
-    def _find_aa_policy_id(clc, module):
+    def _find_aa_policy_id(self):
         """
         Validate if the anti affinity policy exist for the given name and throw error if not
-        :param clc: the clc-sdk instance
-        :param module: the module to validate
         :return: aa_policy_id: the anti affinity policy id of the given name.
         """
-        aa_policy_id = module.params.get('anti_affinity_policy_id')
-        aa_policy_name = module.params.get('anti_affinity_policy_name')
-        if not aa_policy_id and aa_policy_name:
-            alias = module.params.get('alias')
-            aa_policy_id = ClcServer._get_anti_affinity_policy_id(
-                clc,
-                module,
-                alias,
-                aa_policy_name)
-            if not aa_policy_id:
-                module.fail_json(
-                    msg='No anti affinity policy was found with policy name : %s' % aa_policy_name)
+        aa_policy_id = self.module.params.get('anti_affinity_policy_id')
+        aa_policy_name = self.module.params.get('anti_affinity_policy_name')
+
+        aa_policy_ids = []
+        if aa_policy_id or aa_policy_name:
+            try:
+                aa_policies = clc_common.call_clc_api(
+                    self.module, self.clc_auth,
+                    'GET', '/antiAffinityPolicies/{0}'.format(
+                        self.clc_auth['clc_alias']))
+                for policy in aa_policies['items']:
+                    if (aa_policy_id and
+                            policy['id'].lower() == aa_policy_id.lower()):
+                        aa_policy_ids.append(policy['id'])
+                    elif (aa_policy_name and
+                            policy['name'].lower() == aa_policy_name.lower()):
+                        aa_policy_ids.append(policy['id'])
+            except ClcApiException as ex:
+                return self.module.fail_json(
+                    msg='Unable to fetch anti affinity policies for '
+                        'account: {0}. {1}'.format(
+                            self.clc_auth['clc_alias'], ex.message))
+
+            if len(aa_policy_ids) != 1:
+                if aa_policy_id:
+                    policy_str = 'id: {0}'.format(aa_policy_id)
+                else:
+                    policy_str = 'name: {0}'.format(aa_policy_name)
+                if len(aa_policy_ids) == 0:
+                    err_msg = 'No anti affinity policy was found with policy '
+                else:
+                    err_msg = 'Multiple anti affinity policies found for '
+                return self.module.fail_json(msg=(err_msg+policy_str))
+
+            aa_policy_id = aa_policy_ids[0]
+
         return aa_policy_id
 
     @staticmethod
@@ -1573,36 +1592,6 @@ class ClcServer(object):
             server_params.get('alias'))
 
         return result
-
-    @staticmethod
-    def _get_anti_affinity_policy_id(clc, module, alias, aa_policy_name):
-        """
-        retrieves the anti affinity policy id of the server based on the name of the policy
-        :param clc: the clc-sdk instance to use
-        :param module: the AnsibleModule object
-        :param alias: the CLC account alias
-        :param aa_policy_name: the anti affinity policy name
-        :return: aa_policy_id: The anti affinity policy id
-        """
-        aa_policy_id = None
-        try:
-            aa_policies = clc.v2.API.Call(method='GET',
-                                          url='antiAffinityPolicies/%s' % alias)
-        except APIFailedResponse as ex:
-            return module.fail_json(msg='Unable to fetch anti affinity policies for account: {0}. {1}'.format(
-                alias, ex.response_text))
-        for aa_policy in aa_policies.get('items'):
-            if aa_policy.get('name') == aa_policy_name:
-                if not aa_policy_id:
-                    aa_policy_id = aa_policy.get('id')
-                else:
-                    return module.fail_json(
-                        msg='multiple anti affinity policies were found with policy name : %s' % aa_policy_name)
-        return aa_policy_id
-
-    #
-    #  This is the function that gets patched to the Request.server object using a lamda closure
-    #
 
     @staticmethod
     def _find_server_by_uuid_w_retry(

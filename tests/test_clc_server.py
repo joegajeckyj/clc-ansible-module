@@ -914,52 +914,62 @@ class TestClcServerFunctions(unittest.TestCase):
         # Assert Result
         self.assertEqual(self.module.fail_json.called, True)
 
-    @patch.object(clc_server, 'clc_sdk')
-    def test_get_anti_affinity_policy_id_singe_match(self, mock_clc_sdk):
-        mock_clc_sdk.v2.API.Call.side_effect = [{'items' :
-                                                [{'name' : 'test1', 'id' : '111'},
-                                                 {'name' : 'test2', 'id' : '222'}]}]
+    @patch.object(clc_common, 'call_clc_api')
+    def test_find_aa_policy_id_singe_match(self, mock_call_api):
+        mock_call_api.return_value = {
+            'items': [{'name': 'test1', 'id': '111'},
+                      {'name': 'test2', 'id': '222'}]}
 
-        policy_id = ClcServer._get_anti_affinity_policy_id(mock_clc_sdk, None, 'alias', 'test1')
-        self.assertEqual('111', policy_id)
+        under_test = ClcServer(self.module)
+        under_test.clc_auth = {'clc_alias': 'mock_alias'}
+        under_test.module.params = {'anti_affinity_policy_name': 'test1'}
+        self.assertEqual('111', under_test._find_aa_policy_id())
 
-    @patch.object(clc_server, 'AnsibleModule')
-    @patch.object(clc_server, 'clc_sdk')
-    def test_find_aa_policy_id_no_match(self, mock_clc_sdk, mock_ansible_module):
-        mock_clc_sdk.v2.API.Call.side_effect = [{'items' :
-                                                [{'name' : 'test1', 'id' : '111'},
-                                                 {'name' : 'test2', 'id' : '222'}]}]
+    @patch.object(clc_common, 'call_clc_api')
+    def test_find_aa_policy_id_no_match(self, mock_call_api):
+        mock_call_api.return_value = {
+            'items': [{'name': 'test1', 'id': '111'},
+                      {'name': 'test2', 'id': '222'}]}
 
         params = {
             'alias': 'test',
             'anti_affinity_policy_id': None,
             'anti_affinity_policy_name': 'nothing'
         }
-        mock_ansible_module.params = params
-        ClcServer._find_aa_policy_id(mock_clc_sdk, mock_ansible_module)
-        mock_ansible_module.fail_json.assert_called_with(
-            msg='No anti affinity policy was found with policy name : nothing')
-
-    @patch.object(clc_server, 'AnsibleModule')
-    @patch.object(clc_server, 'clc_sdk')
-    def test_get_anti_affinity_policy_id_duplicate_match(self, mock_clc_sdk, mock_ansible_module):
-        mock_clc_sdk.v2.API.Call.side_effect = [{'items' :
-                                                [{'name' : 'test1', 'id' : '111'},
-                                                 {'name' : 'test2', 'id' : '222'},
-                                                 {'name' : 'test1', 'id' : '111'}]}]
-
-        policy_id = ClcServer._get_anti_affinity_policy_id(mock_clc_sdk, mock_ansible_module, 'alias', 'test1')
-        mock_ansible_module.fail_json.assert_called_with(
-            msg='multiple anti affinity policies were found with policy name : test1')
-
-    @patch.object(clc_server, 'clc_sdk')
-    def test_get_anti_affinity_policy_id_get_fail(self, mock_clc_sdk):
-        error = APIFailedResponse()
-        error.response_text = 'Mock failure message'
-        mock_clc_sdk.v2.API.Call.side_effect = error
         under_test = ClcServer(self.module)
-        under_test._get_anti_affinity_policy_id(mock_clc_sdk, self.module, 'alias', 'aa_policy_name')
-        self.module.fail_json.assert_called_with(msg='Unable to fetch anti affinity policies for account: alias. Mock failure message')
+        under_test.clc_auth = {'clc_alias': 'mock_alias'}
+        under_test.module.params = params
+        under_test._find_aa_policy_id()
+        under_test.module.fail_json.assert_called_with(
+            msg='No anti affinity policy was found with policy name: nothing')
+
+    @patch.object(clc_common, 'call_clc_api')
+    def test_find_aa_policy_id_duplicate_match(self, mock_call_api):
+        mock_call_api.return_value = {
+            'items': [{'name': 'test1', 'id': '111'},
+                      {'name': 'test2', 'id': '222'},
+                      {'name': 'test1', 'id': '111'}]}
+
+        under_test = ClcServer(self.module)
+        under_test.clc_auth = {'clc_alias': 'mock_alias'}
+        under_test.module.params = {'anti_affinity_policy_name': 'test1'}
+
+        policy_id = under_test._find_aa_policy_id()
+        under_test.module.fail_json.assert_called_with(
+            msg='Multiple anti affinity policies found for name: test1')
+
+    @patch.object(clc_common, 'call_clc_api')
+    def test_find_aa_policy_id_get_fail(self, mock_call_api):
+        error = ClcApiException()
+        error.response_text = 'Mock failure message'
+        mock_call_api.side_effect = error
+        under_test = ClcServer(self.module)
+        under_test.clc_auth = {'clc_alias': 'mock_alias'}
+        under_test.module.params = {'anti_affinity_policy_id': 'mock_id'}
+        under_test._find_aa_policy_id()
+        self.module.fail_json.assert_called_with(
+            msg='Unable to fetch anti affinity policies for '
+                'account: mock_alias. Mock failure message')
 
     @patch.object(clc_server, 'clc_sdk')
     def test_create_clc_server_exception(self, mock_clc_sdk):
