@@ -126,7 +126,7 @@ def call_clc_api(module, clc_auth, method, url, headers=None, data=None):
         raise ClcApiException(
             'Error calling CenturyLink Cloud API: {0}'.format(ex.message))
     try:
-        return json.load(response.read())
+        return json.loads(response.read())
     except:
         raise ClcApiException(
             'Error converting CenturyLink Cloud API response to JSON')
