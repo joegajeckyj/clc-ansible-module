@@ -151,7 +151,7 @@ options:
     required: False
   network_id:
     description:
-      - The network UUID on which to create servers.
+      - The network on which to create servers. Searches by UUID, name, or cidr.
     default: None
     required: False
   packages:
@@ -947,6 +947,7 @@ class ClcServer(object):
         server_type = self.module.params.get('type')
         result = None
 
+        # TODO: Handle case where lookup_template is None, None.lower() will fail
         if state == 'present' and server_type != 'bareMetal':
             try:
                 templates = clc_common.call_clc_api(
@@ -957,7 +958,7 @@ class ClcServer(object):
                     if template['name'].lower().find(
                             lookup_template.lower()) != -1:
                         return template['name']
-            except CLCException:
+            except ClcApiException:
                 self.module.fail_json(
                     msg=str(
                         "Unable to find a template: " +
@@ -966,35 +967,43 @@ class ClcServer(object):
                         datacenter.id))
         return result
 
-    @staticmethod
-    def _find_network_id(module, datacenter):
+    def _find_network_id(self, datacenter):
         """
         Validate the provided network id or return a default.
-        :param module: the module to validate
         :param datacenter: the datacenter to search for a network id
         :return: a valid network id
         """
-        network_id = module.params.get('network_id')
+        network_id = self.module.params.get('network_id')
         # Validates provided network id
         # Allows lookup of network by id, name, or cidr notation
-        if network_id:
-          network_id = datacenter.Networks(forced_load=True).Get(network_id).id
 
-        if not network_id:
-            try:
-                network_id = datacenter.Networks().networks[0].id
-                # -- added for clc-sdk 2.23 compatibility
-                # datacenter_networks = clc_sdk.v2.Networks(
-                #   networks_lst=datacenter._DeploymentCapabilities()['deployableNetworks'])
-                # network_id = datacenter_networks.networks[0].id
-                # -- end
-            except CLCException:
-                module.fail_json(
-                    msg=str(
-                        "Unable to find a network in location: " +
-                        datacenter.id))
-
-        return network_id
+        try:
+            temp_auth = self.clc_auth.copy()
+            temp_auth['v2_api_url'] = 'https://api.ctl.io/v2-experimental/'
+            networks = clc_common.call_clc_api(
+                self.module, temp_auth,
+                'GET', '/networks/{0}/{1}'.format(
+                    temp_auth['clc_alias'], datacenter))
+            if network_id:
+                for network in networks:
+                    if network_id.lower() in [network['id'].lower(),
+                                              network['name'].lower(),
+                                              network['cidr'].lower()]:
+                        network_id = network['id']
+                        break
+                if not network_id:
+                    return self.module.fail_json(
+                        msg='No matching network: {0} '
+                            'found in location: {1}'.format(
+                                network_id, datacenter))
+            else:
+                network_id = networks[0]['id']
+            return network_id
+        except ClcApiException:
+            return self.module.fail_json(
+                msg=str(
+                    "Unable to find a network in location: " +
+                    datacenter))
 
     @staticmethod
     def _find_aa_policy_id(clc, module):
