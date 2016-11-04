@@ -946,8 +946,9 @@ class ClcServer(object):
         state = self.module.params.get('state')
         server_type = self.module.params.get('type')
         result = None
+        if lookup_template is None:
+            return result
 
-        # TODO: Handle case where lookup_template is None, None.lower() will fail
         if state == 'present' and server_type != 'bareMetal':
             try:
                 templates = clc_common.call_clc_api(
@@ -964,7 +965,7 @@ class ClcServer(object):
                         "Unable to find a template: " +
                         lookup_template +
                         " in location: " +
-                        datacenter.id))
+                        datacenter))
         return result
 
     def _find_network_id(self, datacenter):
