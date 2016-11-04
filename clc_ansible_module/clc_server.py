@@ -742,7 +742,7 @@ class ClcServer(object):
         params['memory'] = self._find_memory(group)
         params['description'] = ClcServer._find_description(module)
         params['ttl'] = ClcServer._find_ttl(module)
-        params['template'] = ClcServer._find_template_id(module, datacenter)
+        params['template'] = self._find_template_id(datacenter)
         params['network_id'] = ClcServer._find_network_id(module, datacenter)
         params['anti_affinity_policy_id'] = ClcServer._find_aa_policy_id(
             clc,
@@ -916,7 +916,6 @@ class ClcServer(object):
     def _find_ttl(module):
         """
         Validate that TTL is > 3600 if set, and fail if not
-        :param clc: clc-sdk instance to use
         :param module: module to validate
         :return: validated ttl
         """
@@ -936,24 +935,30 @@ class ClcServer(object):
                         '%Y-%m-%dT%H:%M:%SZ')
         return ttl
 
-    @staticmethod
-    def _find_template_id(module, datacenter):
+    def _find_template_id(self, datacenter):
         """
         Find the template id by calling the CLC API.
         :param module: the module to validate
         :param datacenter: the datacenter to search for the template
         :return: a valid clc template id
         """
-        lookup_template = module.params.get('template')
-        state = module.params.get('state')
-        type = module.params.get('type')
+        lookup_template = self.module.params.get('template')
+        state = self.module.params.get('state')
+        server_type = self.module.params.get('type')
         result = None
 
-        if state == 'present' and type != 'bareMetal':
+        if state == 'present' and server_type != 'bareMetal':
             try:
-                result = datacenter.Templates().Search(lookup_template)[0].id
+                templates = clc_common.call_clc_api(
+                    self.module, self.clc_auth,
+                    'GET', '/datacenters/{0}/{1}/deploymentCapabilities'.format(
+                        self.clc_auth['clc_alias'], datacenter))['templates']
+                for template in templates:
+                    if template['name'].lower().find(
+                            lookup_template.lower()) != -1:
+                        return template['name']
             except CLCException:
-                module.fail_json(
+                self.module.fail_json(
                     msg=str(
                         "Unable to find a template: " +
                         lookup_template +
