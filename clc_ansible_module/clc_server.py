@@ -777,19 +777,21 @@ class ClcServer(object):
 
     def _find_datacenter(self):
         """
-        Find the datacenter by calling the CLC API.
-        :param clc: clc-sdk instance to use
-        :param module: module to validate
-        :return: clc-sdk.Datacenter instance
+        Find or Validate the datacenter by calling the CLC API.
+        :return: Datacenter ID
         """
         location = self.module.params.get('location')
         try:
-            if not location:
-                if 'clc_location' not in self.clc_auth:
-                    self.clc_auth = clc_common.authenticate(self.module)
+            if 'clc_location' not in self.clc_auth:
+                self.clc_auth = clc_common.authenticate(self.module)
+                if not location:
+                    location = self.clc_auth['clc_location']
+                else:
+                    # Override authentication with user-provided location
+                    self.clc_auth['clc_location'] = location
             return location
         except CLCException as ex:
-            module.fail_json(
+            self.module.fail_json(
                 msg=str(
                     "Unable to find location: {0}".format(location)))
 
@@ -799,16 +801,19 @@ class ClcServer(object):
         :return: Account alias
         """
         alias = self.module.params.get('alias')
-        if not alias:
-            try:
-                if 'clc_alias' not in self.clc_auth:
-                    self.clc_auth = clc_common.authenticate(self.module)
-                alias = self.clc_auth['clc_alias']
-            except ClcApiException as ex:
-                self.module.fail_json(
-                    msg='Unable to find account alias. {0}'.format(
-                        ex.message))
-        return alias
+        try:
+            if 'clc_alias' not in self.clc_auth:
+                self.clc_auth = clc_common.authenticate(self.module)
+                if not alias:
+                    alias = self.clc_auth['clc_alias']
+                else:
+                    # Override authentication with user-provided alias
+                    self.clc_auth['clc_alias'] = alias
+            return alias
+        except ClcApiException as ex:
+            self.module.fail_json(
+                msg='Unable to find account alias. {0}'.format(
+                    ex.message))
 
     def _find_cpu(self, group):
         """
