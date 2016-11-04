@@ -125,7 +125,11 @@ def call_clc_api(module, clc_auth, method, url, headers=None, data=None):
     except urllib2.HTTPError as ex:
         raise ClcApiException(
             'Error calling CenturyLink Cloud API: {0}'.format(ex.message))
-    return response
+    try:
+        return json.load(response.read())
+    except:
+        raise ClcApiException(
+            'Error converting CenturyLink Cloud API response to JSON')
 
 
 def authenticate(module):
@@ -151,15 +155,11 @@ def authenticate(module):
             'clc_location': clc_location,
         })
     elif v2_api_username and v2_api_passwd:
-        response = call_clc_api(
+        r = call_clc_api(
             module, clc_auth,
             'POST', '/authentication/login',
             data={'username': v2_api_username,
                   'password': v2_api_passwd})
-        if response.code not in [200]:
-            return module.fail_json(
-                msg='Failed to authenticate with clc V2 api.')
-        r = json.loads(response.read())
         clc_auth.update({
             'v2_api_token': r['bearerToken'],
             'clc_alias': r['accountAlias'],
@@ -200,23 +200,21 @@ def group_tree(module, clc_auth, alias=None, datacenter=None):
         datacenter = clc_auth['clc_location']
     if alias is None:
         alias = clc_auth['clc_alias']
-    response = call_clc_api(
+    r = call_clc_api(
         module, clc_auth,
         'GET', '/datacenters/{0}/{1}'.format(
             alias, datacenter),
         data={'GroupLinks': 'true'})
 
-    r = json.loads(response.read())
     root_group_id, root_group_name = [(obj['id'], obj['name'])
                                       for obj in r['links']
                                       if obj['rel'] == "group"][0]
 
-    response = call_clc_api(
+    group_data = call_clc_api(
         module, clc_auth,
         'GET', '/groups/{0}/{1}'.format(
             alias, root_group_id))
 
-    group_data = json.loads(response.read())
     return _walk_groups(None, group_data)
 
 
@@ -294,11 +292,11 @@ def _find_server(module, clc_auth, server_id):
     :return: Server object
     """
     try:
-        response = call_clc_api(
+        r = call_clc_api(
             module, clc_auth,
             'GET', 'servers/{0}/{1}'.format(
                 clc_auth['clc_alias'], server_id))
-        server = Server(json.loads(response.read()))
+        server = Server(r)
         return server
     except ClcApiException as ex:
         return module.fail_json(
