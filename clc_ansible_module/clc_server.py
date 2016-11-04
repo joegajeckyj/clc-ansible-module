@@ -967,6 +967,7 @@ class ClcServer(object):
                         datacenter))
         return result
 
+    # TODO: Move most network functions into common module
     def _find_network_id(self, datacenter):
         """
         Validate the provided network id or return a default.
