@@ -734,14 +734,15 @@ class TestClcServerFunctions(unittest.TestCase):
 
         # Function Under Test
         under_test = ClcServer(self.module)
+        under_test.root_group = mock_rootgroup
         result_group = under_test._find_group(self.datacenter, "MyCoolGroup")
 
         # Assert Result
         clc_common.find_group.assert_called_once_with(
             self.module, mock_rootgroup,
             'MyCoolGroup')
-        self.datacenter.Groups().Get.assert_called_once_with("MyCoolGroup")
-        self.assertEqual(self.module.called, False)
+        self.assertEqual(self.module.fail_json.called, False)
+
 
     @patch.object(clc_common, 'find_group')
     @patch.object(clc_common, 'group_tree')
@@ -765,28 +766,30 @@ class TestClcServerFunctions(unittest.TestCase):
     def test_find_group_w_recursive_lookup(self,
                                            mock_clc_sdk):
         # Setup
-        mock_datacenter = mock.MagicMock()
         mock_group_to_find = mock.MagicMock()
-        mock_group = mock.MagicMock()
-        mock_subgroup = mock.MagicMock()
-        mock_subsubgroup = mock.MagicMock()
-
         mock_group_to_find.name = "TEST_RECURSIVE_GRP"
 
-        mock_datacenter.Groups().Get.side_effect = CLCException()
-        mock_datacenter.Groups().groups = [mock_group]
+        mock_rootgroup = mock.MagicMock()
+        mock_rootgroup.name = 'rootgroup'
+        mock_rootgroup.parent = None
 
-        mock_group.Subgroups().Get.side_effect = CLCException()
-        mock_group.Subgroups().groups = [mock_subgroup]
+        mock_subgroup = mock.MagicMock()
+        mock_subgroup.name = 'subgroup'
+        mock_rootgroup.children = [mock_subgroup]
+        mock_subgroup.parent = mock_rootgroup
 
-        mock_subgroup.Subgroups().Get.side_effect = CLCException()
-        mock_subgroup.Subgroups().groups = [mock_subsubgroup]
+        mock_subsubgroup = mock.MagicMock()
+        mock_subsubgroup.name = 'subsubgroup'
+        mock_subgroup.children = [mock_subsubgroup]
+        mock_subsubgroup.parent = mock_subgroup
 
-        mock_subsubgroup.Subgroups().Get.return_value = mock_group_to_find
+        mock_subsubgroup.children = [mock_group_to_find]
+        mock_group_to_find.parent = mock_subsubgroup
 
         # Test
         under_test = ClcServer(self.module)
-        result = under_test._find_group(datacenter=mock_datacenter,
+        under_test.root_group = mock_rootgroup
+        result = under_test._find_group('datacenter',
                                         lookup_group="TEST_RECURSIVE_GRP")
         # Assert
         self.assertEqual(mock_group_to_find, result)
@@ -1024,13 +1027,16 @@ class TestClcServerFunctions(unittest.TestCase):
         self.module.fail_json.assert_called_with(
             msg='Unable to find location: testdc')
 
-    def test_find_group_no_result(self):
-        mock_dc = mock.MagicMock()
-        mock_dc.id = 'testdc'
-        mock_dc.Groups().Get.side_effect = CLCException()
+    @patch.object(clc_common, 'find_group')
+    def test_find_group_no_result(self, mock_find_group):
+        datacenter = 'testdc'
+        mock_find_group.side_effect = ClcApiException()
+
         under_test = ClcServer(self.module)
-        ret = under_test._find_group(mock_dc, 'lookup_group')
-        self.module.fail_json.assert_called_with(msg='Unable to find group: lookup_group in location: testdc')
+        under_test.root_group = mock.MagicMock()
+        ret = under_test._find_group(datacenter, 'lookup_group')
+        self.module.fail_json.assert_called_with(
+            msg='Unable to find group: lookup_group in location: testdc')
         self.assertEqual(ret, None)
 
     def test_find_cpu_exception(self):
