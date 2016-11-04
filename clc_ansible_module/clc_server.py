@@ -615,7 +615,8 @@ class ClcServer(object):
         if wait:
             datacenter = self._find_datacenter()
             group = self._find_group(datacenter, lookup_group=p.get('group'))
-            # TODO: Get servers for group and fix return JSON value
+            # TODO: API call switches between GB and MB.  Change to all references are in GB and we drop the units
+            # self.data['details']['memoryGB'] = int(math.floor(self.data['details']['memoryMB']/1024))
             try:
                 servers = clc_common.servers_in_group(
                     self.module, self.clc_auth, group)
