@@ -788,7 +788,7 @@ class ClcServer(object):
                 # Override authentication with user-provided location
                 self.clc_auth['clc_location'] = location
             return location
-        except CLCException as ex:
+        except ClcApiException as ex:
             self.module.fail_json(
                 msg=str(
                     "Unable to find location: {0}".format(location)))

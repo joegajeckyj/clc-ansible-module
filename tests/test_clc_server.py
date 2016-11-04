@@ -710,7 +710,8 @@ class TestClcServerFunctions(unittest.TestCase):
 
         self.datacenter.reset_mock()
 
-    def test_find_datacenter(self):
+    @patch.object(clc_common, 'authenticate')
+    def test_find_datacenter(self, mock_authenticate):
         # Setup Test
         self.module.params = {
             'location': "MyMockGroup"
@@ -720,8 +721,9 @@ class TestClcServerFunctions(unittest.TestCase):
         under_test = ClcServer(self.module)
         under_test._find_datacenter()
 
-        # assert result
-        self.clc.v2.Datacenter.assert_called_once_with("MyMockGroup")
+        mock_authenticate.assert_called_once()
+        self.assertTrue(under_test.clc_auth['clc_location'], 'MyMockGroup')
+        self.assertFalse(self.module.fail_json.called)
 
     @patch.object(clc_common, 'find_group')
     @patch.object(clc_common, 'group_tree')
@@ -996,35 +998,31 @@ class TestClcServerFunctions(unittest.TestCase):
         under_test._create_clc_server(mock_clc_sdk, self.module, server_params)
         self.module.fail_json.assert_called_with(msg='Unable to create the server: test server. Mock failure message')
 
-    @patch.object(clc_server, 'clc_sdk')
-    def test_find_datacenter_no_location(self, mock_clc_sdk):
-        error = CLCException()
-        mock_account = mock.MagicMock()
-        mock_account.data = {
-            'primaryDataCenter': 'TESTDC'
-        }
-        mock_clc_sdk.v2.Account.return_value = mock_account
-        mock_clc_sdk.v2.Datacenter.return_value = 'DCRESULT'
+    @patch.object(clc_common, 'call_clc_api')
+    def test_find_datacenter_no_location(self, mock_call_api):
         params = {
             'state': 'present',
         }
-        self.module.params = params
         under_test = ClcServer(self.module)
-        ret = under_test._find_datacenter(mock_clc_sdk, self.module)
-        self.assertEqual(ret, 'DCRESULT')
+        under_test.module.params = params
+        under_test.clc_auth = {'clc_alias': 'dummy_alias',
+                               'clc_location': 'dummy_location'}
+        ret = under_test._find_datacenter()
+        self.assertEqual(ret, 'dummy_location')
 
-    @patch.object(clc_server, 'clc_sdk')
-    def test_find_datacenter_exception(self, mock_clc_sdk):
-        error = CLCException()
-        mock_clc_sdk.v2.Datacenter.side_effect = error
+    @patch.object(clc_common, 'authenticate')
+    def test_find_datacenter_exception(self, mock_authenticate):
+        error = ClcApiException()
+        mock_authenticate.side_effect = error
         params = {
             'state': 'present',
             'location': 'testdc'
         }
-        self.module.params = params
         under_test = ClcServer(self.module)
-        under_test._find_datacenter(mock_clc_sdk, self.module)
-        self.module.fail_json.assert_called_with(msg='Unable to find location: testdc')
+        under_test.module.params = params
+        under_test._find_datacenter()
+        self.module.fail_json.assert_called_with(
+            msg='Unable to find location: testdc')
 
     def test_find_group_no_result(self):
         mock_dc = mock.MagicMock()
