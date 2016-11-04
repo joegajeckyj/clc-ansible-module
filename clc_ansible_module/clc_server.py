@@ -782,11 +782,11 @@ class ClcServer(object):
         try:
             if 'clc_location' not in self.clc_auth:
                 self.clc_auth = clc_common.authenticate(self.module)
-                if not location:
-                    location = self.clc_auth['clc_location']
-                else:
-                    # Override authentication with user-provided location
-                    self.clc_auth['clc_location'] = location
+            if not location:
+                location = self.clc_auth['clc_location']
+            else:
+                # Override authentication with user-provided location
+                self.clc_auth['clc_location'] = location
             return location
         except CLCException as ex:
             self.module.fail_json(
@@ -802,11 +802,11 @@ class ClcServer(object):
         try:
             if 'clc_alias' not in self.clc_auth:
                 self.clc_auth = clc_common.authenticate(self.module)
-                if not alias:
-                    alias = self.clc_auth['clc_alias']
-                else:
-                    # Override authentication with user-provided alias
-                    self.clc_auth['clc_alias'] = alias
+            if not alias:
+                alias = self.clc_auth['clc_alias']
+            elif alias:
+                # Override authentication with user-provided alias
+                self.clc_auth['clc_alias'] = alias
             return alias
         except ClcApiException as ex:
             self.module.fail_json(
