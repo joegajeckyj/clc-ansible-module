@@ -1033,29 +1033,33 @@ class TestClcServerFunctions(unittest.TestCase):
         self.module.fail_json.assert_called_with(msg='Unable to find group: lookup_group in location: testdc')
         self.assertEqual(ret, None)
 
-    @patch.object(clc_server, 'clc_sdk')
-    def test_find_cpu_exception(self, mock_clc_sdk):
+    def test_find_cpu_exception(self):
         params = {
             'state': 'present'
         }
         mock_group = mock.MagicMock()
-        mock_group.Defaults.return_value = None
-        mock_clc_sdk.v2.Group.return_value = mock_group
-        self.module.params = params
-        ClcServer._find_cpu(mock_clc_sdk, self.module)
-        self.module.fail_json.assert_called_with(msg="Can't determine a default cpu value. Please provide a value for cpu.")
+        under_test = ClcServer(self.module)
+        under_test.module.params = params
+        under_test._group_default_value = mock.MagicMock()
+        under_test._group_default_value.return_value = None
+        under_test._find_cpu(mock_group)
+        self.module.fail_json.assert_called_with(
+            msg="Can't determine a default cpu value. "
+                "Please provide a value for cpu.")
 
-    @patch.object(clc_server, 'clc_sdk')
-    def test_find_memory_exception(self, mock_clc_sdk):
+    def test_find_memory_exception(self):
         params = {
             'state': 'present'
         }
         mock_group = mock.MagicMock()
-        mock_group.Defaults.return_value = None
-        mock_clc_sdk.v2.Group.return_value = mock_group
-        self.module.params = params
-        ClcServer._find_memory(mock_clc_sdk, self.module)
-        self.module.fail_json.assert_called_with(msg="Can't determine a default memory value. Please provide a value for memory.")
+        under_test = ClcServer(self.module)
+        under_test.module.params = params
+        under_test._group_default_value = mock.MagicMock()
+        under_test._group_default_value.return_value = None
+        under_test._find_memory(mock_group)
+        self.module.fail_json.assert_called_with(
+            msg="Can't determine a default memory value. "
+                "Please provide a value for memory.")
 
     def test_validate_types_exception_standard(self):
         params = {
