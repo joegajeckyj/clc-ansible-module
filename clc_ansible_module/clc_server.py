@@ -616,8 +616,9 @@ class ClcServer(object):
             datacenter = self._find_datacenter(self.clc, self.module)
             group = self._find_group(datacenter, lookup_group=p.get('group'))
             # TODO: Get servers for group and fix return JSON value
-            servers = group.Servers().Servers()
             try:
+                servers = clc_common.servers_in_group(
+                    self.module, self.clc_auth, group)
                 group = group.data
                 group['servers'] = [s.id for s in servers]
             except AttributeError:
@@ -728,9 +729,6 @@ class ClcServer(object):
         # Grab the alias so that we can properly validate server name
         alias = self._find_alias()
 
-        root_group = clc_common.group_tree(self.module, self.clc_auth,
-                                           alias=alias, datacenter=datacenter)
-
         ClcServer._validate_types(module)
         ClcServer._validate_name(module, alias)
         ClcServer._validate_counts(module)
@@ -762,6 +760,8 @@ class ClcServer(object):
                 self.module, self.clc_auth,
                 'GET', '/groups/{0}/{1}/defaults'.format(
                     self.clc_auth['clc_alias'], group.id))
+            # TODO: Determine why failing in tests
+            # Mock out properly, and ensure real-live tests work
             defaults = json.loads(response.read())
         except ClcApiException as ex:
             return self.module.fail_json(
