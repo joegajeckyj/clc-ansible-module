@@ -20,7 +20,7 @@
     - name: Create server snapshot
       clc_server_snapshot:
         server_ids:
-            - {{Server_Name}}
+            - "{{Server_Name}}"
         expiration_days: 1
         wait: True
         state: present
