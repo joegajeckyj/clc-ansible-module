@@ -12,11 +12,19 @@
 # See the License for the specific language governing permissions and
 # limitations under the License.
 ---
-- name: Create a snapshot on a set of servers
+- name: Create a snapshot on a server
   hosts: localhost
   gather_facts: False
   connection: local
   tasks:
+    - name: delete server snapshot
+      clc_server_snapshot:
+        server_ids:
+            - "{{server_name}}"
+        wait: True
+        state: absent
+      register: clc
+
     - name: Create server snapshot
       clc_server_snapshot:
         server_ids:
@@ -24,4 +32,5 @@
         expiration_days: 1
         wait: True
         state: present
-      register: clc
+register: clc
+
