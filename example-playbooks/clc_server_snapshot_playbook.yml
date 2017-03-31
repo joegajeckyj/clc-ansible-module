@@ -21,7 +21,7 @@
       clc_server_snapshot:
         server_ids:
             - "{{server_name}}"
-        expiration_days: 100
+        expiration_days: 1
         wait: True
         state: present
       register: clc
