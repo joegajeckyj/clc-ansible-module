@@ -33,4 +33,3 @@
         wait: True
         state: present
 register: clc
-
